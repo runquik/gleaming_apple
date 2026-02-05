@@ -34,49 +34,87 @@
     </footer>
 
     <script>
-    // Animated preview for Game of Life card
+    // Animated preview for Game of Life card — with glow and age coloring
     (function() {
         const canvas = document.getElementById('preview-gol');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const cols = 40, rows = 40;
+        const cols = 50, rows = 50;
         const cellW = canvas.width / cols;
         const cellH = canvas.height / rows;
+        const MAX_AGE = 80;
+        const FADE = 8;
+        const palette = [
+            [255,255,255],[110,231,183],[16,185,129],[6,95,70],[139,92,246]
+        ];
 
-        let grid = Array.from({length: rows}, () =>
-            Array.from({length: cols}, () => Math.random() < 0.3)
-        );
+        // age > 0 = alive, < 0 = fading, 0 = dead
+        let age = new Int16Array(rows * cols);
+        for (let i = 0; i < age.length; i++) age[i] = Math.random() < 0.3 ? 1 : 0;
+
+        function lerp(stops, t) {
+            t = Math.max(0, Math.min(1, t));
+            const s = t * (stops.length - 1);
+            const i = Math.floor(s), f = s - i;
+            const a = stops[Math.min(i, stops.length-1)];
+            const b = stops[Math.min(i+1, stops.length-1)];
+            return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
+        }
 
         function step() {
-            return grid.map((row, y) => row.map((cell, x) => {
-                let n = 0;
-                for (let dy = -1; dy <= 1; dy++)
-                    for (let dx = -1; dx <= 1; dx++) {
-                        if (!dy && !dx) continue;
-                        const ny = (y + dy + rows) % rows;
-                        const nx = (x + dx + cols) % cols;
-                        n += grid[ny][nx] ? 1 : 0;
-                    }
-                return cell ? (n === 2 || n === 3) : (n === 3);
-            }));
+            const next = new Int16Array(rows * cols);
+            for (let y = 0; y < rows; y++)
+                for (let x = 0; x < cols; x++) {
+                    let n = 0;
+                    for (let dy = -1; dy <= 1; dy++)
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (!dy && !dx) continue;
+                            if (age[((y+dy+rows)%rows)*cols + (x+dx+cols)%cols] > 0) n++;
+                        }
+                    const i = y * cols + x;
+                    const alive = age[i] > 0;
+                    if (alive) next[i] = (n===2||n===3) ? Math.min(age[i]+1, MAX_AGE) : -FADE;
+                    else if (n === 3) next[i] = 1;
+                    else next[i] = age[i] < 0 ? age[i] + 1 : 0;
+                }
+            age = next;
         }
 
         function draw() {
-            ctx.fillStyle = '#0a0a0f';
+            ctx.fillStyle = '#05050a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#6ee7b7';
-            grid.forEach((row, y) => row.forEach((cell, x) => {
-                if (cell) ctx.fillRect(x * cellW + 0.5, y * cellH + 0.5, cellW - 1, cellH - 1);
-            }));
+            for (let y = 0; y < rows; y++)
+                for (let x = 0; x < cols; x++) {
+                    const v = age[y * cols + x];
+                    if (v > 0) {
+                        const [r,g,b] = lerp(palette, v / MAX_AGE);
+                        const cx = x * cellW + cellW/2, cy = y * cellH + cellH/2;
+                        // Glow
+                        const brightness = Math.max(0.2, 1 - v/MAX_AGE);
+                        const grad = ctx.createRadialGradient(cx,cy,0, cx,cy, cellW*1.5);
+                        grad.addColorStop(0, `rgba(${r|0},${g|0},${b|0},${(0.35*brightness).toFixed(2)})`);
+                        grad.addColorStop(1, `rgba(${r|0},${g|0},${b|0},0)`);
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(cx-cellW*1.5, cy-cellH*1.5, cellW*3, cellH*3);
+                        // Cell dot
+                        ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, cellW/2 - 0.3, 0, Math.PI*2);
+                        ctx.fill();
+                    } else if (v < 0) {
+                        const alpha = (-v / FADE) * 0.3;
+                        const cx = x * cellW + cellW/2, cy = y * cellH + cellH/2;
+                        ctx.fillStyle = `rgba(139,92,246,${alpha.toFixed(2)})`;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, cellW/2 - 0.5, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
         }
 
-        function tick() {
-            grid = step();
-            draw();
-        }
-
+        function tick() { step(); draw(); }
         draw();
-        setInterval(tick, 200);
+        setInterval(tick, 80);
     })();
     </script>
 </body>

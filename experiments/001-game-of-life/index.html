@@ -8,16 +8,13 @@
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --bg: #0a0a0f;
-            --surface: #12121a;
-            --border: #1e1e2e;
-            --text: #e0e0e8;
-            --text-dim: #6b6b80;
+            --bg: #05050a;
+            --surface: #0c0c14;
+            --border: #1a1a2a;
+            --text: #d0d0dd;
+            --text-dim: #555568;
             --accent: #6ee7b7;
             --accent-dim: #2a4a3e;
-            --cell-alive: #6ee7b7;
-            --cell-dead: #0f0f18;
-            --gridline: #151520;
         }
 
         body {
@@ -28,95 +25,103 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            overflow: hidden;
         }
 
         header {
-            padding: 1.5rem 2rem 1rem;
+            padding: 1rem 2rem 0.5rem;
             text-align: center;
             width: 100%;
+            position: relative;
+            z-index: 10;
         }
 
         .back {
             color: var(--text-dim);
             text-decoration: none;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
-
         .back:hover { color: var(--accent); }
 
         header h1 {
-            font-size: 1.4rem;
+            font-size: 1.2rem;
             font-weight: 600;
-            margin: 0.5rem 0 0.25rem;
+            margin: 0.3rem 0 0.15rem;
         }
 
         header p {
             color: var(--text-dim);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
 
         .controls {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
+            gap: 0.4rem;
             justify-content: center;
-            padding: 1rem 2rem;
-            max-width: 700px;
+            padding: 0.6rem 1rem;
+            position: relative;
+            z-index: 10;
         }
 
         button, select {
             font-family: inherit;
-            font-size: 0.8rem;
-            padding: 0.4rem 0.8rem;
-            background: var(--surface);
+            font-size: 0.75rem;
+            padding: 0.35rem 0.7rem;
+            background: rgba(12, 12, 20, 0.8);
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 6px;
             cursor: pointer;
             transition: border-color 0.15s;
+            backdrop-filter: blur(8px);
         }
-
-        button:hover, select:hover {
-            border-color: var(--accent-dim);
-        }
-
-        button.active {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
+        button:hover, select:hover { border-color: var(--accent-dim); }
+        button.active { border-color: var(--accent); color: var(--accent); }
 
         .stats {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-dim);
-            padding: 0.5rem;
+            padding: 0.3rem;
             display: flex;
             gap: 1.5rem;
             justify-content: center;
+            position: relative;
+            z-index: 10;
         }
-
         .stats span { color: var(--accent); }
 
         .canvas-wrap {
-            padding: 0.5rem;
             flex: 1;
             display: flex;
             justify-content: center;
-            align-items: flex-start;
+            align-items: center;
+            width: 100%;
+            position: relative;
         }
 
         canvas {
-            border: 1px solid var(--border);
-            border-radius: 4px;
             cursor: crosshair;
-            max-width: 100%;
-            max-height: 70vh;
+            width: 100%;
+            height: 100%;
+        }
+
+        #glow-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            mix-blend-mode: screen;
         }
 
         .hint {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--text-dim);
-            padding: 0.5rem 2rem 1.5rem;
+            padding: 0.4rem 2rem 0.8rem;
             text-align: center;
+            position: relative;
+            z-index: 10;
         }
     </style>
 </head>
@@ -141,10 +146,17 @@
             <option value="r-pentomino">R-Pentomino</option>
         </select>
         <select id="sel-speed">
-            <option value="200">Normal</option>
-            <option value="100">Fast</option>
-            <option value="50">Blazing</option>
-            <option value="400">Slow</option>
+            <option value="60">Normal</option>
+            <option value="30">Fast</option>
+            <option value="15">Blazing</option>
+            <option value="120">Slow</option>
+        </select>
+        <select id="sel-palette">
+            <option value="emerald">Emerald</option>
+            <option value="plasma">Plasma</option>
+            <option value="ocean">Ocean</option>
+            <option value="fire">Fire</option>
+            <option value="mono">Mono</option>
         </select>
     </div>
 
@@ -155,16 +167,58 @@
 
     <div class="canvas-wrap">
         <canvas id="grid"></canvas>
+        <canvas id="glow-canvas"></canvas>
     </div>
 
-    <div class="hint">Click or drag to draw. Scroll to zoom (coming soon).</div>
+    <div class="hint">Click or drag to draw cells. Pick a pattern or just randomize and watch.</div>
 
     <script>
     (function() {
         // --- Config ---
-        const CELL = 12;
-        const COLS = 60;
-        const ROWS = 45;
+        const CELL = 8;
+        const MAX_AGE = 120;      // max age for color cycling
+        const FADE_FRAMES = 12;   // how many frames a dead cell takes to fade
+        const GLOW_RADIUS = 14;   // px radius of glow around alive cells
+
+        // --- Color palettes ---
+        // Each palette: array of [r,g,b] stops that we interpolate through by cell age
+        const PALETTES = {
+            emerald: [
+                [255, 255, 255],  // newborn: white
+                [110, 231, 183],  // young: mint
+                [16, 185, 129],   // mid: emerald
+                [6, 95, 70],      // old: deep green
+                [139, 92, 246],   // ancient: purple
+            ],
+            plasma: [
+                [255, 255, 255],
+                [236, 72, 153],   // pink
+                [168, 85, 247],   // purple
+                [59, 130, 246],   // blue
+                [14, 165, 233],   // sky
+            ],
+            ocean: [
+                [255, 255, 255],
+                [125, 211, 252],  // light blue
+                [56, 189, 248],   // sky
+                [14, 116, 144],   // teal
+                [21, 94, 117],    // deep
+            ],
+            fire: [
+                [255, 255, 255],
+                [253, 224, 71],   // yellow
+                [251, 146, 60],   // orange
+                [239, 68, 68],    // red
+                [127, 29, 29],    // deep red
+            ],
+            mono: [
+                [255, 255, 255],
+                [200, 200, 210],
+                [140, 140, 155],
+                [80, 80, 95],
+                [50, 50, 65],
+            ],
+        };
 
         // --- Patterns ---
         const PATTERNS = {
@@ -196,39 +250,56 @@
         // --- State ---
         const canvas = document.getElementById('grid');
         const ctx = canvas.getContext('2d');
-        canvas.width = COLS * CELL;
-        canvas.height = ROWS * CELL;
+        const glowCanvas = document.getElementById('glow-canvas');
+        const glowCtx = glowCanvas.getContext('2d');
 
-        let grid = makeGrid();
+        let COLS, ROWS;
+        let age;       // Int16Array grid: >0 = alive (age in frames), <0 = dead (negative = fade countdown)
         let running = true;
-        let speed = 200;
+        let simInterval = 60;  // ms between simulation steps
         let generation = 0;
         let drawing = false;
         let drawValue = true;
-        let timer = null;
+        let palette = 'emerald';
+        let lastStepTime = 0;
 
-        // --- Grid helpers ---
-        function makeGrid() {
-            return Array.from({length: ROWS}, () => new Uint8Array(COLS));
+        function resize() {
+            const wrap = canvas.parentElement;
+            const w = wrap.clientWidth;
+            const h = wrap.clientHeight;
+            COLS = Math.floor(w / CELL);
+            ROWS = Math.floor(h / CELL);
+            canvas.width = COLS * CELL;
+            canvas.height = ROWS * CELL;
+            glowCanvas.width = COLS * CELL;
+            glowCanvas.height = ROWS * CELL;
         }
+
+        function makeAge() {
+            return new Int16Array(ROWS * COLS);
+        }
+
+        function idx(y, x) { return y * COLS + x; }
+
+        function isAlive(y, x) { return age[idx(y, x)] > 0; }
 
         function randomize(density) {
             generation = 0;
-            grid = Array.from({length: ROWS}, () =>
-                Uint8Array.from({length: COLS}, () => Math.random() < (density || 0.3) ? 1 : 0)
-            );
+            age = makeAge();
+            for (let i = 0; i < ROWS * COLS; i++) {
+                age[i] = Math.random() < (density || 0.3) ? 1 : 0;
+            }
         }
 
-        function clear() {
+        function clearGrid() {
             generation = 0;
-            grid = makeGrid();
+            age = makeAge();
         }
 
         function placePattern(name) {
-            clear();
+            clearGrid();
             const cells = PATTERNS[name];
             if (!cells) return;
-            // Find bounding box and center it
             let maxR = 0, maxC = 0;
             cells.forEach(([r, c]) => { maxR = Math.max(maxR, r); maxC = Math.max(maxC, c); });
             const offR = Math.floor((ROWS - maxR) / 2);
@@ -236,72 +307,134 @@
             cells.forEach(([r, c]) => {
                 const nr = r + offR, nc = c + offC;
                 if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS)
-                    grid[nr][nc] = 1;
+                    age[idx(nr, nc)] = 1;
             });
+        }
+
+        // --- Color interpolation ---
+        function lerpColor(stops, t) {
+            // t in [0, 1] — interpolate through palette stops
+            t = Math.max(0, Math.min(1, t));
+            const seg = t * (stops.length - 1);
+            const i = Math.floor(seg);
+            const f = seg - i;
+            const a = stops[Math.min(i, stops.length - 1)];
+            const b = stops[Math.min(i + 1, stops.length - 1)];
+            return [
+                Math.round(a[0] + (b[0] - a[0]) * f),
+                Math.round(a[1] + (b[1] - a[1]) * f),
+                Math.round(a[2] + (b[2] - a[2]) * f),
+            ];
+        }
+
+        function cellColor(cellAge) {
+            const stops = PALETTES[palette] || PALETTES.emerald;
+            const t = Math.min(cellAge / MAX_AGE, 1);
+            return lerpColor(stops, t);
         }
 
         // --- Simulation ---
         function step() {
-            const next = makeGrid();
+            const newAge = makeAge();
             for (let y = 0; y < ROWS; y++) {
                 for (let x = 0; x < COLS; x++) {
                     let n = 0;
                     for (let dy = -1; dy <= 1; dy++)
                         for (let dx = -1; dx <= 1; dx++) {
                             if (!dy && !dx) continue;
-                            n += grid[(y + dy + ROWS) % ROWS][(x + dx + COLS) % COLS];
+                            const ny = (y + dy + ROWS) % ROWS;
+                            const nx = (x + dx + COLS) % COLS;
+                            if (age[idx(ny, nx)] > 0) n++;
                         }
-                    next[y][x] = grid[y][x] ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
+                    const i = idx(y, x);
+                    const alive = age[i] > 0;
+                    if (alive) {
+                        // Survive?
+                        newAge[i] = (n === 2 || n === 3)
+                            ? Math.min(age[i] + 1, MAX_AGE)
+                            : -FADE_FRAMES;  // just died — start fade
+                    } else {
+                        // Birth?
+                        if (n === 3) {
+                            newAge[i] = 1;
+                        } else {
+                            // Continue fading or stay dead
+                            newAge[i] = age[i] < 0 ? age[i] + 1 : 0;
+                        }
+                    }
                 }
             }
-            grid = next;
+            age = newAge;
             generation++;
         }
 
         // --- Rendering ---
         function draw() {
-            ctx.fillStyle = '#0f0f18';
+            // Main canvas: dark background
+            ctx.fillStyle = '#05050a';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Grid lines
-            ctx.strokeStyle = '#151520';
-            ctx.lineWidth = 0.5;
-            for (let x = 0; x <= COLS; x++) {
-                ctx.beginPath();
-                ctx.moveTo(x * CELL, 0);
-                ctx.lineTo(x * CELL, ROWS * CELL);
-                ctx.stroke();
-            }
-            for (let y = 0; y <= ROWS; y++) {
-                ctx.beginPath();
-                ctx.moveTo(0, y * CELL);
-                ctx.lineTo(COLS * CELL, y * CELL);
-                ctx.stroke();
-            }
+            // Glow canvas: clear
+            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
 
-            // Cells
-            ctx.fillStyle = '#6ee7b7';
-            for (let y = 0; y < ROWS; y++)
-                for (let x = 0; x < COLS; x++)
-                    if (grid[y][x])
-                        ctx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
-
-            // Stats
             let pop = 0;
-            for (let y = 0; y < ROWS; y++)
-                for (let x = 0; x < COLS; x++) pop += grid[y][x];
+
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const i = idx(y, x);
+                    const v = age[i];
+
+                    if (v > 0) {
+                        // Alive cell
+                        pop++;
+                        const [r, g, b] = cellColor(v);
+                        const cx = x * CELL + CELL / 2;
+                        const cy = y * CELL + CELL / 2;
+                        const radius = CELL / 2 - 0.5;
+
+                        // Cell body — rounded
+                        ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Glow — soft radial gradient on glow layer
+                        const brightness = Math.max(0.15, 1 - v / MAX_AGE);
+                        const grad = glowCtx.createRadialGradient(cx, cy, 0, cx, cy, GLOW_RADIUS);
+                        grad.addColorStop(0, `rgba(${r},${g},${b},${(0.5 * brightness).toFixed(2)})`);
+                        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                        glowCtx.fillStyle = grad;
+                        glowCtx.fillRect(cx - GLOW_RADIUS, cy - GLOW_RADIUS, GLOW_RADIUS * 2, GLOW_RADIUS * 2);
+
+                    } else if (v < 0) {
+                        // Fading dead cell
+                        const fadeProgress = 1 - (-v / FADE_FRAMES);  // 0 = just died, 1 = fully faded
+                        const alpha = (1 - fadeProgress) * 0.5;
+                        const stops = PALETTES[palette] || PALETTES.emerald;
+                        const [r, g, b] = stops[stops.length - 1];  // use oldest color for ghosts
+                        const cx = x * CELL + CELL / 2;
+                        const cy = y * CELL + CELL / 2;
+
+                        ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, CELL / 2 - 1, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
             document.getElementById('stat-gen').textContent = generation;
             document.getElementById('stat-pop').textContent = pop;
         }
 
-        // --- Loop ---
-        function startLoop() {
-            stopLoop();
-            timer = setInterval(() => { step(); draw(); }, speed);
-        }
-
-        function stopLoop() {
-            if (timer) { clearInterval(timer); timer = null; }
+        // --- Animation loop ---
+        function loop(timestamp) {
+            if (running && timestamp - lastStepTime >= simInterval) {
+                step();
+                lastStepTime = timestamp;
+            }
+            draw();
+            requestAnimationFrame(loop);
         }
 
         // --- Mouse drawing ---
@@ -314,49 +447,44 @@
             return [y, x];
         }
 
+        function paint(y, x) {
+            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                age[idx(y, x)] = drawValue ? 1 : 0;
+            }
+        }
+
         canvas.addEventListener('mousedown', (e) => {
             const [y, x] = cellAt(e);
             if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = !grid[y][x];
-                grid[y][x] = drawValue ? 1 : 0;
+                drawValue = age[idx(y, x)] <= 0;
+                paint(y, x);
                 drawing = true;
-                draw();
             }
         });
 
         canvas.addEventListener('mousemove', (e) => {
             if (!drawing) return;
             const [y, x] = cellAt(e);
-            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                grid[y][x] = drawValue ? 1 : 0;
-                draw();
-            }
+            paint(y, x);
         });
 
         window.addEventListener('mouseup', () => { drawing = false; });
 
-        // --- Touch drawing ---
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            const touch = e.touches[0];
-            const [y, x] = cellAt(touch);
+            const [y, x] = cellAt(e.touches[0]);
             if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = !grid[y][x];
-                grid[y][x] = drawValue ? 1 : 0;
+                drawValue = age[idx(y, x)] <= 0;
+                paint(y, x);
                 drawing = true;
-                draw();
             }
         }, {passive: false});
 
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             if (!drawing) return;
-            const touch = e.touches[0];
-            const [y, x] = cellAt(touch);
-            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                grid[y][x] = drawValue ? 1 : 0;
-                draw();
-            }
+            const [y, x] = cellAt(e.touches[0]);
+            paint(y, x);
         }, {passive: false});
 
         window.addEventListener('touchend', () => { drawing = false; });
@@ -367,32 +495,52 @@
             running = !running;
             btnPlay.innerHTML = running ? '&#9654; Play' : '&#9646;&#9646; Pause';
             btnPlay.classList.toggle('active', running);
-            if (running) startLoop(); else stopLoop();
         });
 
         document.getElementById('btn-step').addEventListener('click', () => {
-            if (running) { running = false; stopLoop(); btnPlay.innerHTML = '&#9646;&#9646; Pause'; btnPlay.classList.remove('active'); }
+            if (running) {
+                running = false;
+                btnPlay.innerHTML = '&#9646;&#9646; Pause';
+                btnPlay.classList.remove('active');
+            }
             step();
-            draw();
         });
 
-        document.getElementById('btn-clear').addEventListener('click', () => { clear(); draw(); });
-        document.getElementById('btn-random').addEventListener('click', () => { randomize(); draw(); });
+        document.getElementById('btn-clear').addEventListener('click', () => { clearGrid(); });
+        document.getElementById('btn-random').addEventListener('click', () => { randomize(); });
 
         document.getElementById('sel-pattern').addEventListener('change', function() {
-            if (this.value) { placePattern(this.value); draw(); }
+            if (this.value) placePattern(this.value);
             this.value = '';
         });
 
         document.getElementById('sel-speed').addEventListener('change', function() {
-            speed = parseInt(this.value);
-            if (running) startLoop();
+            simInterval = parseInt(this.value);
+        });
+
+        document.getElementById('sel-palette').addEventListener('change', function() {
+            palette = this.value;
+        });
+
+        // --- Resize handler ---
+        window.addEventListener('resize', () => {
+            const oldAge = age;
+            const oldCols = COLS;
+            const oldRows = ROWS;
+            resize();
+            age = makeAge();
+            // Copy old state into new grid
+            const copyRows = Math.min(oldRows, ROWS);
+            const copyCols = Math.min(oldCols, COLS);
+            for (let y = 0; y < copyRows; y++)
+                for (let x = 0; x < copyCols; x++)
+                    age[idx(y, x)] = oldAge[y * oldCols + x];
         });
 
         // --- Init ---
+        resize();
         randomize();
-        draw();
-        startLoop();
+        requestAnimationFrame(loop);
     })();
     </script>
 </body>
