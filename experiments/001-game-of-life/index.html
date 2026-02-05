@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>001 — Game of Life</title>
+    <title>001 — Game of Life: Virus Defense</title>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -15,6 +15,8 @@
             --text-dim: #555568;
             --accent: #6ee7b7;
             --accent-dim: #2a4a3e;
+            --virus: #ef4444;
+            --virus-dim: #4a1a1a;
         }
 
         body {
@@ -26,10 +28,11 @@
             flex-direction: column;
             align-items: center;
             overflow: hidden;
+            user-select: none;
         }
 
         header {
-            padding: 1rem 2rem 0.5rem;
+            padding: 0.8rem 2rem 0.4rem;
             text-align: center;
             width: 100%;
             position: relative;
@@ -39,19 +42,20 @@
         .back {
             color: var(--text-dim);
             text-decoration: none;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
         }
         .back:hover { color: var(--accent); }
 
         header h1 {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 600;
-            margin: 0.3rem 0 0.15rem;
+            margin: 0.25rem 0 0.1rem;
         }
+        header h1 .virus-text { color: var(--virus); }
 
         header p {
             color: var(--text-dim);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
         }
 
         .controls {
@@ -59,37 +63,46 @@
             flex-wrap: wrap;
             gap: 0.4rem;
             justify-content: center;
-            padding: 0.6rem 1rem;
+            padding: 0.5rem 1rem;
             position: relative;
             z-index: 10;
         }
 
         button, select {
             font-family: inherit;
-            font-size: 0.75rem;
-            padding: 0.35rem 0.7rem;
-            background: rgba(12, 12, 20, 0.8);
+            font-size: 0.72rem;
+            padding: 0.3rem 0.65rem;
+            background: rgba(12, 12, 20, 0.85);
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 6px;
             cursor: pointer;
-            transition: border-color 0.15s;
+            transition: border-color 0.15s, background 0.15s;
             backdrop-filter: blur(8px);
         }
         button:hover, select:hover { border-color: var(--accent-dim); }
         button.active { border-color: var(--accent); color: var(--accent); }
+        button.danger { border-color: var(--virus); color: var(--virus); }
+        button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+        button:disabled { opacity: 0.35; cursor: default; }
 
-        .stats {
+        .game-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.2rem;
+            justify-content: center;
+            align-items: center;
+            padding: 0.3rem 1rem;
             font-size: 0.7rem;
             color: var(--text-dim);
-            padding: 0.3rem;
-            display: flex;
-            gap: 1.5rem;
-            justify-content: center;
             position: relative;
             z-index: 10;
         }
-        .stats span { color: var(--accent); }
+        .game-bar span { font-weight: 600; }
+        .game-bar .healthy { color: var(--accent); }
+        .game-bar .virus-count { color: var(--virus); }
+        .game-bar .wave-num { color: #facc15; }
+        .game-bar .gen { color: var(--text-dim); }
 
         .canvas-wrap {
             flex: 1;
@@ -115,10 +128,49 @@
             mix-blend-mode: screen;
         }
 
-        .hint {
-            font-size: 0.65rem;
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            background: rgba(5, 5, 10, 0.75);
+            backdrop-filter: blur(6px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s;
+        }
+        .overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .overlay h2 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+        .overlay .sub {
             color: var(--text-dim);
-            padding: 0.4rem 2rem 0.8rem;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+        .overlay button {
+            font-size: 0.9rem;
+            padding: 0.6rem 1.5rem;
+        }
+        .overlay .game-over-title { color: var(--virus); }
+        .overlay .wave-clear-title { color: var(--accent); }
+        .overlay .stats-line {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-top: 0.75rem;
+        }
+
+        .hint {
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            padding: 0.3rem 2rem 0.6rem;
             text-align: center;
             position: relative;
             z-index: 10;
@@ -128,41 +180,29 @@
 <body>
     <header>
         <a href="../../" class="back">&larr; back to lab</a>
-        <h1>Game of Life</h1>
-        <p>Conway's cellular automaton</p>
+        <h1>Game of Life: <span class="virus-text">Virus Defense</span></h1>
+        <p>Draw your cells. Survive the infection.</p>
     </header>
 
     <div class="controls">
         <button id="btn-play" class="active">&#9654; Play</button>
         <button id="btn-step">Step</button>
-        <button id="btn-clear">Clear</button>
-        <button id="btn-random">Random</button>
-        <select id="sel-pattern">
-            <option value="">Load pattern...</option>
-            <option value="glider">Glider</option>
-            <option value="pulsar">Pulsar</option>
-            <option value="gosper-gun">Gosper Gun</option>
-            <option value="lwss">Lightweight Spaceship</option>
-            <option value="r-pentomino">R-Pentomino</option>
-        </select>
+        <button id="btn-clear">Clear All</button>
+        <button id="btn-random">Random Healthy</button>
+        <button id="btn-wave" class="danger">Launch Wave</button>
         <select id="sel-speed">
-            <option value="60">Normal</option>
-            <option value="30">Fast</option>
-            <option value="15">Blazing</option>
-            <option value="120">Slow</option>
-        </select>
-        <select id="sel-palette">
-            <option value="emerald">Emerald</option>
-            <option value="plasma">Plasma</option>
-            <option value="ocean">Ocean</option>
-            <option value="fire">Fire</option>
-            <option value="mono">Mono</option>
+            <option value="80">Normal</option>
+            <option value="40">Fast</option>
+            <option value="20">Blazing</option>
+            <option value="150">Slow</option>
         </select>
     </div>
 
-    <div class="stats">
-        <div>Gen: <span id="stat-gen">0</span></div>
-        <div>Pop: <span id="stat-pop">0</span></div>
+    <div class="game-bar">
+        <div>Wave: <span class="wave-num" id="stat-wave">0</span></div>
+        <div>Healthy: <span class="healthy" id="stat-healthy">0</span></div>
+        <div>Virus: <span class="virus-count" id="stat-virus">0</span></div>
+        <div>Gen: <span class="gen" id="stat-gen">0</span></div>
     </div>
 
     <div class="canvas-wrap">
@@ -170,81 +210,65 @@
         <canvas id="glow-canvas"></canvas>
     </div>
 
-    <div class="hint">Click or drag to draw cells. Pick a pattern or just randomize and watch.</div>
+    <div class="hint" id="hint">Draw your cells, then hit "Launch Wave" when ready.</div>
+
+    <!-- Wave cleared overlay -->
+    <div class="overlay" id="overlay-clear">
+        <h2 class="wave-clear-title">Wave Cleared!</h2>
+        <p class="sub" id="clear-sub">The virus has been eradicated. But more is coming...</p>
+        <button id="btn-next-wave" class="danger">Next Wave</button>
+        <p class="stats-line" id="clear-stats"></p>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="overlay-gameover">
+        <h2 class="game-over-title">Infected.</h2>
+        <p class="sub" id="gameover-sub">Your colony has been consumed.</p>
+        <button id="btn-restart">Try Again</button>
+        <p class="stats-line" id="gameover-stats"></p>
+    </div>
 
     <script>
     (function() {
         // --- Config ---
-        const CELL = 8;
-        const MAX_AGE = 120;      // max age for color cycling
-        const FADE_FRAMES = 12;   // how many frames a dead cell takes to fade
-        const GLOW_RADIUS = 14;   // px radius of glow around alive cells
+        const CELL = 7;
+        const MAX_AGE = 100;
+        const FADE_FRAMES = 10;
+        const GLOW_RADIUS = 12;
+        const INFECTION_THRESHOLD = 3;  // healthy cell converts if >= this many virus neighbors
 
-        // --- Color palettes ---
-        // Each palette: array of [r,g,b] stops that we interpolate through by cell age
-        const PALETTES = {
-            emerald: [
-                [255, 255, 255],  // newborn: white
-                [110, 231, 183],  // young: mint
-                [16, 185, 129],   // mid: emerald
-                [6, 95, 70],      // old: deep green
-                [139, 92, 246],   // ancient: purple
-            ],
-            plasma: [
-                [255, 255, 255],
-                [236, 72, 153],   // pink
-                [168, 85, 247],   // purple
-                [59, 130, 246],   // blue
-                [14, 165, 233],   // sky
-            ],
-            ocean: [
-                [255, 255, 255],
-                [125, 211, 252],  // light blue
-                [56, 189, 248],   // sky
-                [14, 116, 144],   // teal
-                [21, 94, 117],    // deep
-            ],
-            fire: [
-                [255, 255, 255],
-                [253, 224, 71],   // yellow
-                [251, 146, 60],   // orange
-                [239, 68, 68],    // red
-                [127, 29, 29],    // deep red
-            ],
-            mono: [
-                [255, 255, 255],
-                [200, 200, 210],
-                [140, 140, 155],
-                [80, 80, 95],
-                [50, 50, 65],
-            ],
-        };
+        // --- Palettes ---
+        const HEALTHY_PALETTE = [
+            [255, 255, 255],
+            [110, 231, 183],
+            [16, 185, 129],
+            [6, 95, 70],
+            [139, 92, 246],
+        ];
 
-        // --- Patterns ---
+        const VIRUS_PALETTE = [
+            [255, 255, 255],
+            [252, 165, 165],  // light red
+            [239, 68, 68],    // red
+            [185, 28, 28],    // dark red
+            [127, 29, 29],    // deep crimson
+        ];
+
+        // Fading ghost colors
+        const HEALTHY_GHOST = [80, 60, 120];
+        const VIRUS_GHOST = [120, 30, 30];
+
+        // --- Patterns for quick placement ---
         const PATTERNS = {
-            glider: [[0,1],[1,2],[2,0],[2,1],[2,2]],
-            pulsar: [
-                [2,4],[2,5],[2,6],[2,10],[2,11],[2,12],
-                [4,2],[4,7],[4,9],[4,14],[5,2],[5,7],[5,9],[5,14],
-                [6,2],[6,7],[6,9],[6,14],
-                [7,4],[7,5],[7,6],[7,10],[7,11],[7,12],
-                [9,4],[9,5],[9,6],[9,10],[9,11],[9,12],
-                [10,2],[10,7],[10,9],[10,14],[11,2],[11,7],[11,9],[11,14],
-                [12,2],[12,7],[12,9],[12,14],
-                [14,4],[14,5],[14,6],[14,10],[14,11],[14,12],
+            fortress: [
+                // A walled structure with internal oscillators
+                // Outer wall (beehive-ish blocks)
+                [0,2],[0,3],[1,1],[1,4],[2,0],[2,5],[3,0],[3,5],[4,1],[4,4],[5,2],[5,3],
+                [0,8],[0,9],[1,7],[1,10],[2,6],[2,11],[3,6],[3,11],[4,7],[4,10],[5,8],[5,9],
+                // Blinker inside
+                [2,3],[3,3],[4,3],
+                [2,8],[3,8],[4,8],
             ],
-            'gosper-gun': [
-                [5,1],[5,2],[6,1],[6,2],
-                [5,11],[6,11],[7,11],
-                [4,12],[8,12],[3,13],[9,13],[3,14],[9,14],
-                [6,15],[4,16],[8,16],
-                [5,17],[6,17],[7,17],[6,18],
-                [3,21],[4,21],[5,21],[3,22],[4,22],[5,22],
-                [2,23],[6,23],[1,25],[2,25],[6,25],[7,25],
-                [3,35],[4,35],[3,36],[4,36],
-            ],
-            lwss: [[0,1],[0,4],[1,0],[2,0],[2,4],[3,0],[3,1],[3,2],[3,3]],
-            'r-pentomino': [[0,1],[0,2],[1,0],[1,1],[2,1]],
         };
 
         // --- State ---
@@ -254,66 +278,72 @@
         const glowCtx = glowCanvas.getContext('2d');
 
         let COLS, ROWS;
-        let age;       // Int16Array grid: >0 = alive (age in frames), <0 = dead (negative = fade countdown)
-        let running = true;
-        let simInterval = 60;  // ms between simulation steps
+        // Cell data: type (0=empty, 1=healthy, 2=virus) and age
+        let cellType;   // Uint8Array
+        let cellAge;    // Int16Array: >0 = alive frames, <0 = fade countdown
+        let running = false;
+        let simInterval = 80;
         let generation = 0;
+        let wave = 0;
         let drawing = false;
         let drawValue = true;
-        let palette = 'emerald';
         let lastStepTime = 0;
+        let gamePhase = 'draw'; // 'draw', 'playing', 'gameover', 'waveclear'
+        let waveActive = false;
+
+        // --- DOM refs ---
+        const btnPlay = document.getElementById('btn-play');
+        const btnWave = document.getElementById('btn-wave');
+        const hintEl = document.getElementById('hint');
+        const overlayClear = document.getElementById('overlay-clear');
+        const overlayGameover = document.getElementById('overlay-gameover');
 
         function resize() {
             const wrap = canvas.parentElement;
-            const w = wrap.clientWidth;
-            const h = wrap.clientHeight;
-            COLS = Math.floor(w / CELL);
-            ROWS = Math.floor(h / CELL);
+            COLS = Math.floor(wrap.clientWidth / CELL);
+            ROWS = Math.floor(wrap.clientHeight / CELL);
             canvas.width = COLS * CELL;
             canvas.height = ROWS * CELL;
             glowCanvas.width = COLS * CELL;
             glowCanvas.height = ROWS * CELL;
         }
 
-        function makeAge() {
-            return new Int16Array(ROWS * COLS);
+        function makeArrays() {
+            cellType = new Uint8Array(ROWS * COLS);
+            cellAge = new Int16Array(ROWS * COLS);
         }
 
         function idx(y, x) { return y * COLS + x; }
 
-        function isAlive(y, x) { return age[idx(y, x)] > 0; }
-
-        function randomize(density) {
+        function clearAll() {
             generation = 0;
-            age = makeAge();
+            wave = 0;
+            gamePhase = 'draw';
+            waveActive = false;
+            running = false;
+            makeArrays();
+            btnPlay.innerHTML = '&#9654; Play';
+            btnPlay.classList.remove('active');
+            btnWave.disabled = false;
+            btnWave.textContent = 'Launch Wave';
+            hintEl.textContent = 'Draw your cells, then hit "Launch Wave" when ready.';
+            overlayClear.classList.remove('visible');
+            overlayGameover.classList.remove('visible');
+        }
+
+        function randomizeHealthy(density) {
+            generation = 0;
+            makeArrays();
             for (let i = 0; i < ROWS * COLS; i++) {
-                age[i] = Math.random() < (density || 0.3) ? 1 : 0;
+                if (Math.random() < (density || 0.25)) {
+                    cellType[i] = 1;
+                    cellAge[i] = 1;
+                }
             }
         }
 
-        function clearGrid() {
-            generation = 0;
-            age = makeAge();
-        }
-
-        function placePattern(name) {
-            clearGrid();
-            const cells = PATTERNS[name];
-            if (!cells) return;
-            let maxR = 0, maxC = 0;
-            cells.forEach(([r, c]) => { maxR = Math.max(maxR, r); maxC = Math.max(maxC, c); });
-            const offR = Math.floor((ROWS - maxR) / 2);
-            const offC = Math.floor((COLS - maxC) / 2);
-            cells.forEach(([r, c]) => {
-                const nr = r + offR, nc = c + offC;
-                if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS)
-                    age[idx(nr, nc)] = 1;
-            });
-        }
-
-        // --- Color interpolation ---
+        // --- Color ---
         function lerpColor(stops, t) {
-            // t in [0, 1] — interpolate through palette stops
             t = Math.max(0, Math.min(1, t));
             const seg = t * (stops.length - 1);
             const i = Math.floor(seg);
@@ -327,91 +357,255 @@
             ];
         }
 
-        function cellColor(cellAge) {
-            const stops = PALETTES[palette] || PALETTES.emerald;
-            const t = Math.min(cellAge / MAX_AGE, 1);
-            return lerpColor(stops, t);
+        function cellColor(type, age) {
+            const pal = type === 1 ? HEALTHY_PALETTE : VIRUS_PALETTE;
+            return lerpColor(pal, Math.min(age / MAX_AGE, 1));
         }
 
-        // --- Simulation ---
-        function step() {
-            const newAge = makeAge();
-            for (let y = 0; y < ROWS; y++) {
-                for (let x = 0; x < COLS; x++) {
-                    let n = 0;
-                    for (let dy = -1; dy <= 1; dy++)
-                        for (let dx = -1; dx <= 1; dx++) {
-                            if (!dy && !dx) continue;
-                            const ny = (y + dy + ROWS) % ROWS;
-                            const nx = (x + dx + COLS) % COLS;
-                            if (age[idx(ny, nx)] > 0) n++;
-                        }
-                    const i = idx(y, x);
-                    const alive = age[i] > 0;
-                    if (alive) {
-                        // Survive?
-                        newAge[i] = (n === 2 || n === 3)
-                            ? Math.min(age[i] + 1, MAX_AGE)
-                            : -FADE_FRAMES;  // just died — start fade
-                    } else {
-                        // Birth?
-                        if (n === 3) {
-                            newAge[i] = 1;
-                        } else {
-                            // Continue fading or stay dead
-                            newAge[i] = age[i] < 0 ? age[i] + 1 : 0;
+        // --- Virus wave spawning ---
+        function spawnWave(waveNum) {
+            // Waves get progressively harder:
+            // - More virus cells
+            // - Spawn from more edges
+            // - Higher density clusters
+            const density = Math.min(0.3 + waveNum * 0.05, 0.7);
+            const thickness = Math.min(2 + Math.floor(waveNum / 2), 6);
+            const edges = [];
+
+            // Wave 1: one edge. Wave 2: two edges. Wave 3+: up to all four
+            if (waveNum >= 1) edges.push('top');
+            if (waveNum >= 2) edges.push('right');
+            if (waveNum >= 3) edges.push('bottom');
+            if (waveNum >= 4) edges.push('left');
+            // After wave 4, cycle but with more thickness/density
+            if (waveNum >= 5 && !edges.includes('top')) edges.push('top');
+
+            for (const edge of edges) {
+                for (let t = 0; t < thickness; t++) {
+                    for (let i = 0; i < (edge === 'top' || edge === 'bottom' ? COLS : ROWS); i++) {
+                        if (Math.random() > density) continue;
+                        let y, x;
+                        if (edge === 'top')    { y = t; x = i; }
+                        if (edge === 'bottom') { y = ROWS - 1 - t; x = i; }
+                        if (edge === 'left')   { y = i; x = t; }
+                        if (edge === 'right')  { y = i; x = COLS - 1 - t; }
+                        if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                            const ii = idx(y, x);
+                            if (cellType[ii] === 0) {  // don't overwrite existing cells
+                                cellType[ii] = 2;
+                                cellAge[ii] = 1;
+                            }
                         }
                     }
                 }
             }
-            age = newAge;
-            generation++;
         }
 
-        // --- Rendering ---
-        function draw() {
-            // Main canvas: dark background
-            ctx.fillStyle = '#05050a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Glow canvas: clear
-            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
-
-            let pop = 0;
+        // --- Simulation ---
+        function step() {
+            const newType = new Uint8Array(ROWS * COLS);
+            const newAge = new Int16Array(ROWS * COLS);
 
             for (let y = 0; y < ROWS; y++) {
                 for (let x = 0; x < COLS; x++) {
                     const i = idx(y, x);
-                    const v = age[i];
+                    const type = cellType[i];
+                    const a = cellAge[i];
 
-                    if (v > 0) {
+                    // Count neighbors by type
+                    let nHealthy = 0, nVirus = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (!dy && !dx) continue;
+                            const ny = (y + dy + ROWS) % ROWS;
+                            const nx = (x + dx + COLS) % COLS;
+                            const ni = idx(ny, nx);
+                            if (cellType[ni] === 1 && cellAge[ni] > 0) nHealthy++;
+                            if (cellType[ni] === 2 && cellAge[ni] > 0) nVirus++;
+                        }
+                    }
+
+                    if (type === 0 || a <= 0) {
+                        // Empty or fading cell — check for birth
+                        const healthyBirth = nHealthy === 3;
+                        const virusBirth = nVirus === 3;
+
+                        if (healthyBirth && virusBirth) {
+                            // Conflict — virus is aggressive, it wins
+                            newType[i] = 2;
+                            newAge[i] = 1;
+                        } else if (virusBirth) {
+                            newType[i] = 2;
+                            newAge[i] = 1;
+                        } else if (healthyBirth) {
+                            newType[i] = 1;
+                            newAge[i] = 1;
+                        } else {
+                            // Stay empty / continue fading
+                            newType[i] = 0;
+                            newAge[i] = a < 0 ? a + 1 : 0;
+                        }
+                    } else if (type === 1) {
+                        // Healthy cell
+                        // Check infection: if surrounded by enough virus, gets converted
+                        if (nVirus >= INFECTION_THRESHOLD) {
+                            newType[i] = 2;
+                            newAge[i] = 1;  // reborn as virus
+                        } else {
+                            // Normal GoL survival with own kind
+                            const ownNeighbors = nHealthy;
+                            if (ownNeighbors === 2 || ownNeighbors === 3) {
+                                newType[i] = 1;
+                                newAge[i] = Math.min(a + 1, MAX_AGE);
+                            } else {
+                                // Dies
+                                newType[i] = 0;
+                                newAge[i] = -FADE_FRAMES;
+                            }
+                        }
+                    } else if (type === 2) {
+                        // Virus cell — normal GoL with own kind
+                        const ownNeighbors = nVirus;
+                        if (ownNeighbors === 2 || ownNeighbors === 3) {
+                            newType[i] = 2;
+                            newAge[i] = Math.min(a + 1, MAX_AGE);
+                        } else {
+                            newType[i] = 0;
+                            newAge[i] = -FADE_FRAMES;
+                        }
+                    }
+                }
+            }
+
+            // Store previous types for ghost coloring
+            const prevType = cellType;
+            cellType = newType;
+            cellAge = newAge;
+            generation++;
+
+            // Copy previous type info for fading cells so we know what color ghost to show
+            for (let i = 0; i < ROWS * COLS; i++) {
+                if (cellType[i] === 0 && cellAge[i] < 0 && prevType[i] > 0) {
+                    // Mark ghost type in high bit area — store in a side channel
+                    // Actually, let's use a simpler approach: store ghost type
+                    ghostType[i] = prevType[i];
+                } else if (cellAge[i] >= 0) {
+                    ghostType[i] = 0;
+                }
+            }
+
+            // Check game conditions
+            if (waveActive) {
+                let healthyCount = 0, virusCount = 0;
+                for (let i = 0; i < ROWS * COLS; i++) {
+                    if (cellType[i] === 1 && cellAge[i] > 0) healthyCount++;
+                    if (cellType[i] === 2 && cellAge[i] > 0) virusCount++;
+                }
+
+                if (healthyCount === 0) {
+                    gameOver();
+                } else if (virusCount === 0) {
+                    waveClear();
+                }
+            }
+        }
+
+        // Ghost type tracking (which type a fading cell was)
+        let ghostType;
+
+        function initGhostType() {
+            ghostType = new Uint8Array(ROWS * COLS);
+        }
+
+        function gameOver() {
+            gamePhase = 'gameover';
+            running = false;
+            waveActive = false;
+            btnPlay.innerHTML = '&#9654; Play';
+            btnPlay.classList.remove('active');
+            document.getElementById('gameover-sub').textContent =
+                wave === 1
+                    ? 'Your colony was consumed on the very first wave.'
+                    : `Your colony survived ${wave - 1} wave${wave - 1 !== 1 ? 's' : ''} before falling.`;
+            document.getElementById('gameover-stats').textContent =
+                `Final generation: ${generation}`;
+            overlayGameover.classList.add('visible');
+        }
+
+        function waveClear() {
+            gamePhase = 'waveclear';
+            running = false;
+            waveActive = false;
+            btnPlay.innerHTML = '&#9654; Play';
+            btnPlay.classList.remove('active');
+
+            let healthyCount = 0;
+            for (let i = 0; i < ROWS * COLS; i++)
+                if (cellType[i] === 1 && cellAge[i] > 0) healthyCount++;
+
+            document.getElementById('clear-sub').textContent =
+                `Wave ${wave} eradicated. ${healthyCount} healthy cells remain.`;
+            document.getElementById('clear-stats').textContent =
+                `Generation: ${generation}  |  Next wave will be harder.`;
+            overlayClear.classList.add('visible');
+        }
+
+        function launchWave() {
+            wave++;
+            waveActive = true;
+            gamePhase = 'playing';
+            running = true;
+            btnPlay.innerHTML = '&#9646;&#9646; Pause';
+            btnPlay.classList.add('active');
+            hintEl.textContent = `Wave ${wave} incoming! Survive until all virus cells die.`;
+            spawnWave(wave);
+            overlayClear.classList.remove('visible');
+        }
+
+        // --- Rendering ---
+        function draw() {
+            ctx.fillStyle = '#05050a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
+
+            let healthyCount = 0, virusCount = 0;
+
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const i = idx(y, x);
+                    const type = cellType[i];
+                    const a = cellAge[i];
+
+                    if (type > 0 && a > 0) {
                         // Alive cell
-                        pop++;
-                        const [r, g, b] = cellColor(v);
+                        if (type === 1) healthyCount++;
+                        else virusCount++;
+
+                        const [r, g, b] = cellColor(type, a);
                         const cx = x * CELL + CELL / 2;
                         const cy = y * CELL + CELL / 2;
                         const radius = CELL / 2 - 0.5;
 
-                        // Cell body — rounded
+                        // Cell body
                         ctx.fillStyle = `rgb(${r},${g},${b})`;
                         ctx.beginPath();
                         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
                         ctx.fill();
 
-                        // Glow — soft radial gradient on glow layer
-                        const brightness = Math.max(0.15, 1 - v / MAX_AGE);
+                        // Glow
+                        const brightness = Math.max(0.15, 1 - a / MAX_AGE);
                         const grad = glowCtx.createRadialGradient(cx, cy, 0, cx, cy, GLOW_RADIUS);
-                        grad.addColorStop(0, `rgba(${r},${g},${b},${(0.5 * brightness).toFixed(2)})`);
+                        grad.addColorStop(0, `rgba(${r},${g},${b},${(0.45 * brightness).toFixed(2)})`);
                         grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
                         glowCtx.fillStyle = grad;
                         glowCtx.fillRect(cx - GLOW_RADIUS, cy - GLOW_RADIUS, GLOW_RADIUS * 2, GLOW_RADIUS * 2);
 
-                    } else if (v < 0) {
-                        // Fading dead cell
-                        const fadeProgress = 1 - (-v / FADE_FRAMES);  // 0 = just died, 1 = fully faded
-                        const alpha = (1 - fadeProgress) * 0.5;
-                        const stops = PALETTES[palette] || PALETTES.emerald;
-                        const [r, g, b] = stops[stops.length - 1];  // use oldest color for ghosts
+                    } else if (a < 0) {
+                        // Fading ghost
+                        const fadeProgress = 1 - (-a / FADE_FRAMES);
+                        const alpha = (1 - fadeProgress) * 0.45;
+                        const gt = ghostType[i];
+                        const [r, g, b] = gt === 2 ? VIRUS_GHOST : HEALTHY_GHOST;
                         const cx = x * CELL + CELL / 2;
                         const cy = y * CELL + CELL / 2;
 
@@ -424,7 +618,9 @@
             }
 
             document.getElementById('stat-gen').textContent = generation;
-            document.getElementById('stat-pop').textContent = pop;
+            document.getElementById('stat-wave').textContent = wave;
+            document.getElementById('stat-healthy').textContent = healthyCount;
+            document.getElementById('stat-virus').textContent = virusCount;
         }
 
         // --- Animation loop ---
@@ -437,109 +633,133 @@
             requestAnimationFrame(loop);
         }
 
-        // --- Mouse drawing ---
+        // --- Mouse / touch drawing ---
         function cellAt(e) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            const x = Math.floor((e.clientX - rect.left) * scaleX / CELL);
-            const y = Math.floor((e.clientY - rect.top) * scaleY / CELL);
-            return [y, x];
+            return [
+                Math.floor((e.clientY - rect.top) * scaleY / CELL),
+                Math.floor((e.clientX - rect.left) * scaleX / CELL),
+            ];
         }
 
         function paint(y, x) {
-            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                age[idx(y, x)] = drawValue ? 1 : 0;
+            if (y < 0 || y >= ROWS || x < 0 || x >= COLS) return;
+            const i = idx(y, x);
+            if (drawValue) {
+                cellType[i] = 1; // always draw healthy
+                cellAge[i] = 1;
+            } else {
+                cellType[i] = 0;
+                cellAge[i] = 0;
             }
         }
 
         canvas.addEventListener('mousedown', (e) => {
             const [y, x] = cellAt(e);
             if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = age[idx(y, x)] <= 0;
+                drawValue = !(cellType[idx(y, x)] === 1 && cellAge[idx(y, x)] > 0);
                 paint(y, x);
                 drawing = true;
             }
         });
-
         canvas.addEventListener('mousemove', (e) => {
             if (!drawing) return;
             const [y, x] = cellAt(e);
             paint(y, x);
         });
-
         window.addEventListener('mouseup', () => { drawing = false; });
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const [y, x] = cellAt(e.touches[0]);
             if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = age[idx(y, x)] <= 0;
+                drawValue = !(cellType[idx(y, x)] === 1 && cellAge[idx(y, x)] > 0);
                 paint(y, x);
                 drawing = true;
             }
         }, {passive: false});
-
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             if (!drawing) return;
             const [y, x] = cellAt(e.touches[0]);
             paint(y, x);
         }, {passive: false});
-
         window.addEventListener('touchend', () => { drawing = false; });
 
         // --- Controls ---
-        const btnPlay = document.getElementById('btn-play');
         btnPlay.addEventListener('click', () => {
+            if (gamePhase === 'gameover') return;
             running = !running;
-            btnPlay.innerHTML = running ? '&#9654; Play' : '&#9646;&#9646; Pause';
+            btnPlay.innerHTML = running ? '&#9646;&#9646; Pause' : '&#9654; Play';
             btnPlay.classList.toggle('active', running);
         });
 
         document.getElementById('btn-step').addEventListener('click', () => {
+            if (gamePhase === 'gameover') return;
             if (running) {
                 running = false;
-                btnPlay.innerHTML = '&#9646;&#9646; Pause';
+                btnPlay.innerHTML = '&#9654; Play';
                 btnPlay.classList.remove('active');
             }
             step();
         });
 
-        document.getElementById('btn-clear').addEventListener('click', () => { clearGrid(); });
-        document.getElementById('btn-random').addEventListener('click', () => { randomize(); });
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            clearAll();
+        });
 
-        document.getElementById('sel-pattern').addEventListener('change', function() {
-            if (this.value) placePattern(this.value);
-            this.value = '';
+        document.getElementById('btn-random').addEventListener('click', () => {
+            clearAll();
+            randomizeHealthy();
+        });
+
+        btnWave.addEventListener('click', () => {
+            if (gamePhase === 'gameover') return;
+            launchWave();
+        });
+
+        document.getElementById('btn-next-wave').addEventListener('click', () => {
+            launchWave();
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            overlayGameover.classList.remove('visible');
+            clearAll();
         });
 
         document.getElementById('sel-speed').addEventListener('change', function() {
             simInterval = parseInt(this.value);
         });
 
-        document.getElementById('sel-palette').addEventListener('change', function() {
-            palette = this.value;
-        });
-
-        // --- Resize handler ---
+        // --- Resize ---
         window.addEventListener('resize', () => {
-            const oldAge = age;
+            const oldType = cellType;
+            const oldAge = cellAge;
+            const oldGhost = ghostType;
             const oldCols = COLS;
             const oldRows = ROWS;
             resize();
-            age = makeAge();
-            // Copy old state into new grid
+            makeArrays();
+            initGhostType();
             const copyRows = Math.min(oldRows, ROWS);
             const copyCols = Math.min(oldCols, COLS);
             for (let y = 0; y < copyRows; y++)
-                for (let x = 0; x < copyCols; x++)
-                    age[idx(y, x)] = oldAge[y * oldCols + x];
+                for (let x = 0; x < copyCols; x++) {
+                    const oi = y * oldCols + x;
+                    const ni = idx(y, x);
+                    cellType[ni] = oldType[oi];
+                    cellAge[ni] = oldAge[oi];
+                    ghostType[ni] = oldGhost[oi];
+                }
         });
 
         // --- Init ---
         resize();
-        randomize();
+        makeArrays();
+        initGhostType();
+        randomizeHealthy();
         requestAnimationFrame(loop);
     })();
     </script>

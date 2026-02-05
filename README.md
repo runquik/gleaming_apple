@@ -8,7 +8,7 @@ A gallery of small, interactive experiments you can play with in your browser.
 
 | # | Name | Description |
 |---|------|-------------|
-| 001 | [Game of Life](experiments/001-game-of-life/) | Conway's cellular automaton — click to draw, watch it evolve |
+| 001 | [Game of Life: Virus Defense](experiments/001-game-of-life/) | Build your colony, survive waves of virus cells trying to infect you |
 
 ## How This Repo Works
 

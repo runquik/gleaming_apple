@@ -113,6 +113,12 @@ main {
     background: var(--accent-dim);
     color: var(--accent);
     border-radius: 100px;
+    margin-right: 0.25rem;
+}
+
+.card-tag.tag-virus {
+    background: #4a1a1a;
+    color: #ef4444;
 }
 
 footer {
