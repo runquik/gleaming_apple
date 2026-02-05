@@ -1,27 +1,34 @@
 # The Experiment Lab
 
-A collaborative playground for small, self-contained experiments.
+A gallery of small, interactive experiments you can play with in your browser.
 
-Each experiment lives in its own directory under `experiments/`. They're meant to be
-short, fun, and complete — something you can build in one sitting and enjoy revisiting.
+**[Visit the site](https://runquik.github.io/gleaming_apple/)**
 
 ## Experiments
 
-| # | Name | Description | Language |
-|---|------|-------------|----------|
-| 001 | [Game of Life](experiments/001-game-of-life/) | Conway's Game of Life in the terminal | Python |
+| # | Name | Description |
+|---|------|-------------|
+| 001 | [Game of Life](experiments/001-game-of-life/) | Conway's cellular automaton — click to draw, watch it evolve |
 
 ## How This Repo Works
 
 - **Each experiment gets a numbered directory** under `experiments/`.
-- **Each experiment is self-contained** — its own README, its own dependencies, its own world.
-- **No rules on language or topic.** Python script, Rust CLI, HTML canvas, shell one-liner — all welcome.
-- **The only requirement:** a README explaining what it does and how to run it.
+- **Each experiment is self-contained** — its own HTML page, its own world.
+- **The gallery** at `index.html` links to every experiment with a live preview.
+- **No build step.** Pure HTML, CSS, and JS. Open any `index.html` in a browser and it works.
+- **Deployable to GitHub Pages** with zero configuration.
 
-## Running Experiments
+## Running Locally
 
-Navigate into any experiment directory and follow its README. Most will be runnable with
-standard toolchains (Python 3, Node, a C compiler, etc.).
+Clone the repo and open `index.html` in your browser, or use any static file server:
+
+```bash
+# Python
+python3 -m http.server 8000
+
+# Node
+npx serve .
+```
 
 ## Ideas Backlog
 
@@ -31,9 +38,9 @@ Things we might build next:
 - [ ] Markov chain text generator
 - [ ] Maze solver visualizer
 - [ ] Tiny ray tracer
-- [ ] Cellular automata beyond Game of Life
-- [ ] A CLI weather dashboard
 - [ ] Langton's Ant simulation
+- [ ] Sorting algorithm visualizer
+- [ ] Generative art with Canvas
 
 ---
 

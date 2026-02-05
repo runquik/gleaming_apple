@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Experiment Lab</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>The Experiment Lab</h1>
+        <p class="subtitle">A gallery of small, interactive experiments. Built one at a time.</p>
+    </header>
+
+    <main>
+        <div class="grid">
+            <a href="experiments/001-game-of-life/" class="card">
+                <div class="card-number">001</div>
+                <div class="card-preview">
+                    <canvas id="preview-gol" width="200" height="200"></canvas>
+                </div>
+                <div class="card-info">
+                    <h2>Game of Life</h2>
+                    <p>Conway's cellular automaton. Click to draw, watch it evolve.</p>
+                    <span class="card-tag">simulation</span>
+                </div>
+            </a>
+        </div>
+    </main>
+
+    <footer>
+        <p>Built by a human and an AI, one experiment at a time.</p>
+        <p><a href="https://github.com/runquik/gleaming_apple" class="gh-link">View on GitHub</a></p>
+    </footer>
+
+    <script>
+    // Animated preview for Game of Life card
+    (function() {
+        const canvas = document.getElementById('preview-gol');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cols = 40, rows = 40;
+        const cellW = canvas.width / cols;
+        const cellH = canvas.height / rows;
+
+        let grid = Array.from({length: rows}, () =>
+            Array.from({length: cols}, () => Math.random() < 0.3)
+        );
+
+        function step() {
+            return grid.map((row, y) => row.map((cell, x) => {
+                let n = 0;
+                for (let dy = -1; dy <= 1; dy++)
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (!dy && !dx) continue;
+                        const ny = (y + dy + rows) % rows;
+                        const nx = (x + dx + cols) % cols;
+                        n += grid[ny][nx] ? 1 : 0;
+                    }
+                return cell ? (n === 2 || n === 3) : (n === 3);
+            }));
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#6ee7b7';
+            grid.forEach((row, y) => row.forEach((cell, x) => {
+                if (cell) ctx.fillRect(x * cellW + 0.5, y * cellH + 0.5, cellW - 1, cellH - 1);
+            }));
+        }
+
+        function tick() {
+            grid = step();
+            draw();
+        }
+
+        draw();
+        setInterval(tick, 200);
+    })();
+    </script>
+</body>
+</html>
