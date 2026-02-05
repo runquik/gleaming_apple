@@ -3,130 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>001 — Game of Life: Virus Defense</title>
+    <title>001 — Light Wave</title>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-        :root {
-            --bg: #05050a;
-            --surface: #0c0c14;
-            --border: #1a1a2a;
-            --text: #d0d0dd;
-            --text-dim: #555568;
-            --accent: #6ee7b7;
-            --accent-dim: #2a4a3e;
-            --virus: #ef4444;
-            --virus-dim: #4a1a1a;
-        }
-
         body {
-            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background: #010103;
             overflow: hidden;
+            cursor: crosshair;
             user-select: none;
-        }
-
-        header {
-            padding: 0.8rem 2rem 0.4rem;
-            text-align: center;
-            width: 100%;
-            position: relative;
-            z-index: 10;
-        }
-
-        .back {
-            color: var(--text-dim);
-            text-decoration: none;
-            font-size: 0.7rem;
-        }
-        .back:hover { color: var(--accent); }
-
-        header h1 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin: 0.25rem 0 0.1rem;
-        }
-        header h1 .virus-text { color: var(--virus); }
-
-        header p {
-            color: var(--text-dim);
-            font-size: 0.7rem;
-        }
-
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
-            justify-content: center;
-            padding: 0.5rem 1rem;
-            position: relative;
-            z-index: 10;
-        }
-
-        button, select {
-            font-family: inherit;
-            font-size: 0.72rem;
-            padding: 0.3rem 0.65rem;
-            background: rgba(12, 12, 20, 0.85);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
-            backdrop-filter: blur(8px);
-        }
-        button:hover, select:hover { border-color: var(--accent-dim); }
-        button.active { border-color: var(--accent); color: var(--accent); }
-        button.danger { border-color: var(--virus); color: var(--virus); }
-        button.danger:hover { background: rgba(239, 68, 68, 0.1); }
-        button:disabled { opacity: 0.35; cursor: default; }
-
-        .game-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.2rem;
-            justify-content: center;
-            align-items: center;
-            padding: 0.3rem 1rem;
-            font-size: 0.7rem;
-            color: var(--text-dim);
-            position: relative;
-            z-index: 10;
-        }
-        .game-bar span { font-weight: 600; }
-        .game-bar .healthy { color: var(--accent); }
-        .game-bar .virus-count { color: var(--virus); }
-        .game-bar .wave-num { color: #facc15; }
-        .game-bar .gen { color: var(--text-dim); }
-
-        .canvas-wrap {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            position: relative;
+            -webkit-user-select: none;
         }
 
         canvas {
-            cursor: crosshair;
-            width: 100%;
-            height: 100%;
+            display: block;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
         }
 
-        #glow-canvas {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%;
-            height: 100%;
+        #glow {
             pointer-events: none;
             mix-blend-mode: screen;
+            filter: blur(5px);
+            z-index: 1;
         }
+
+        .back {
+            position: fixed;
+            top: 1rem;
+            left: 1.2rem;
+            z-index: 100;
+            color: rgba(255, 255, 255, 0.15);
+            text-decoration: none;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.7rem;
+            transition: color 0.4s;
+        }
+        .back:hover { color: rgba(255, 255, 255, 0.6); }
 
         .overlay {
             position: fixed;
@@ -135,477 +49,338 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 100;
-            background: rgba(5, 5, 10, 0.75);
-            backdrop-filter: blur(6px);
-            opacity: 0;
+            z-index: 50;
             pointer-events: none;
-            transition: opacity 0.4s;
-        }
-        .overlay.visible {
             opacity: 1;
-            pointer-events: auto;
+            transition: opacity 2s ease;
         }
-        .overlay h2 {
-            font-size: 1.8rem;
-            margin-bottom: 0.5rem;
-        }
-        .overlay .sub {
-            color: var(--text-dim);
-            font-size: 0.85rem;
-            margin-bottom: 1.5rem;
-        }
-        .overlay button {
-            font-size: 0.9rem;
-            padding: 0.6rem 1.5rem;
-        }
-        .overlay .game-over-title { color: var(--virus); }
-        .overlay .wave-clear-title { color: var(--accent); }
-        .overlay .stats-line {
-            color: var(--text-dim);
-            font-size: 0.75rem;
-            margin-top: 0.75rem;
+        .overlay.hidden { opacity: 0; }
+
+        .overlay h1 {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: clamp(1.8rem, 5vw, 3.5rem);
+            font-weight: 200;
+            letter-spacing: 0.4em;
+            color: #fff;
+            text-shadow:
+                0 0 30px rgba(255, 255, 255, 0.4),
+                0 0 60px rgba(255, 220, 140, 0.2),
+                0 0 120px rgba(255, 180, 80, 0.1);
+            margin-bottom: 1.2rem;
         }
 
-        .hint {
-            font-size: 0.6rem;
-            color: var(--text-dim);
-            padding: 0.3rem 2rem 0.6rem;
-            text-align: center;
-            position: relative;
-            z-index: 10;
+        .overlay p {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: clamp(0.65rem, 1.5vw, 0.85rem);
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 0.12em;
         }
     </style>
 </head>
 <body>
-    <header>
-        <a href="../../" class="back">&larr; back to lab</a>
-        <h1>Game of Life: <span class="virus-text">Virus Defense</span></h1>
-        <p>Draw your cells. Survive the infection.</p>
-    </header>
+    <a href="../../" class="back">&larr; back</a>
+    <canvas id="grid"></canvas>
+    <canvas id="glow"></canvas>
 
-    <div class="controls">
-        <button id="btn-play" class="active">&#9654; Play</button>
-        <button id="btn-step">Step</button>
-        <button id="btn-clear">Clear All</button>
-        <button id="btn-random">Random Healthy</button>
-        <button id="btn-wave" class="danger">Launch Wave</button>
-        <select id="sel-speed">
-            <option value="80">Normal</option>
-            <option value="40">Fast</option>
-            <option value="20">Blazing</option>
-            <option value="150">Slow</option>
-        </select>
-    </div>
-
-    <div class="game-bar">
-        <div>Wave: <span class="wave-num" id="stat-wave">0</span></div>
-        <div>Healthy: <span class="healthy" id="stat-healthy">0</span></div>
-        <div>Virus: <span class="virus-count" id="stat-virus">0</span></div>
-        <div>Gen: <span class="gen" id="stat-gen">0</span></div>
-    </div>
-
-    <div class="canvas-wrap">
-        <canvas id="grid"></canvas>
-        <canvas id="glow-canvas"></canvas>
-    </div>
-
-    <div class="hint" id="hint">Draw your cells, then hit "Launch Wave" when ready.</div>
-
-    <!-- Wave cleared overlay -->
-    <div class="overlay" id="overlay-clear">
-        <h2 class="wave-clear-title">Wave Cleared!</h2>
-        <p class="sub" id="clear-sub">The virus has been eradicated. But more is coming...</p>
-        <button id="btn-next-wave" class="danger">Next Wave</button>
-        <p class="stats-line" id="clear-stats"></p>
-    </div>
-
-    <!-- Game over overlay -->
-    <div class="overlay" id="overlay-gameover">
-        <h2 class="game-over-title">Infected.</h2>
-        <p class="sub" id="gameover-sub">Your colony has been consumed.</p>
-        <button id="btn-restart">Try Again</button>
-        <p class="stats-line" id="gameover-stats"></p>
+    <div class="overlay" id="overlay">
+        <h1>LIGHT WAVE</h1>
+        <p>Draw light waves and eliminate virus waves.</p>
     </div>
 
     <script>
-    (function() {
-        // --- Config ---
-        const CELL = 7;
-        const MAX_AGE = 100;
-        const FADE_FRAMES = 10;
-        const GLOW_RADIUS = 12;
-        const INFECTION_THRESHOLD = 3;  // healthy cell converts if >= this many virus neighbors
+    (function () {
+        /* ── Config ── */
+        const CELL           = 6;
+        const MAX_AGE        = 120;
+        const FADE_FRAMES    = 15;
+        const GLOW_RADIUS    = 18;
+        const BRUSH_RADIUS   = 3;
+        const SIM_INTERVAL   = 50;
+        const CONVERT_LIGHT  = 2;   // light converts virus if virus has >= N light neighbors
+        const CONVERT_VIRUS  = 4;   // virus converts light if light has >= N virus neighbors
+        const MAX_PARTICLES  = 250;
 
-        // --- Palettes ---
-        const HEALTHY_PALETTE = [
+        /* ── Palettes ── */
+        // Light: white-hot → warm gold → ember
+        const LIGHT_PAL = [
             [255, 255, 255],
-            [110, 231, 183],
-            [16, 185, 129],
-            [6, 95, 70],
-            [139, 92, 246],
+            [255, 245, 210],
+            [255, 215, 120],
+            [255, 175, 55],
+            [210, 115, 40],
         ];
-
-        const VIRUS_PALETTE = [
-            [255, 255, 255],
-            [252, 165, 165],  // light red
-            [239, 68, 68],    // red
-            [185, 28, 28],    // dark red
-            [127, 29, 29],    // deep crimson
+        // Virus: bright red → deep crimson
+        const VIRUS_PAL = [
+            [255, 95, 95],
+            [225, 50, 50],
+            [185, 22, 22],
+            [130, 12, 12],
+            [75, 5, 5],
         ];
+        const LIGHT_GHOST = [200, 160, 60];
+        const VIRUS_GHOST = [110, 20, 20];
 
-        // Fading ghost colors
-        const HEALTHY_GHOST = [80, 60, 120];
-        const VIRUS_GHOST = [120, 30, 30];
-
-        // --- Patterns for quick placement ---
-        const PATTERNS = {
-            fortress: [
-                // A walled structure with internal oscillators
-                // Outer wall (beehive-ish blocks)
-                [0,2],[0,3],[1,1],[1,4],[2,0],[2,5],[3,0],[3,5],[4,1],[4,4],[5,2],[5,3],
-                [0,8],[0,9],[1,7],[1,10],[2,6],[2,11],[3,6],[3,11],[4,7],[4,10],[5,8],[5,9],
-                // Blinker inside
-                [2,3],[3,3],[4,3],
-                [2,8],[3,8],[4,8],
-            ],
-        };
-
-        // --- State ---
-        const canvas = document.getElementById('grid');
-        const ctx = canvas.getContext('2d');
-        const glowCanvas = document.getElementById('glow-canvas');
-        const glowCtx = glowCanvas.getContext('2d');
+        /* ── Canvas setup ── */
+        const canvas  = document.getElementById('grid');
+        const ctx     = canvas.getContext('2d');
+        const glow    = document.getElementById('glow');
+        const glCtx   = glow.getContext('2d');
 
         let COLS, ROWS;
-        // Cell data: type (0=empty, 1=healthy, 2=virus) and age
-        let cellType;   // Uint8Array
-        let cellAge;    // Int16Array: >0 = alive frames, <0 = fade countdown
-        let running = false;
-        let simInterval = 80;
-        let generation = 0;
-        let wave = 0;
-        let drawing = false;
-        let drawValue = true;
-        let lastStepTime = 0;
-        let gamePhase = 'draw'; // 'draw', 'playing', 'gameover', 'waveclear'
-        let waveActive = false;
+        let cellType, cellAge, ghostType;
+        let lastStep    = 0;
+        let steps       = 0;
+        let vTick       = 0;      // cluster timer
+        let wTick       = 0;      // wave timer
+        let drawing     = false;
+        let interacted  = false;
+        let particles   = [];
 
-        // --- DOM refs ---
-        const btnPlay = document.getElementById('btn-play');
-        const btnWave = document.getElementById('btn-wave');
-        const hintEl = document.getElementById('hint');
-        const overlayClear = document.getElementById('overlay-clear');
-        const overlayGameover = document.getElementById('overlay-gameover');
+        /* ── Overlay ── */
+        const overlay = document.getElementById('overlay');
+        setTimeout(() => overlay.classList.add('hidden'), 4500);
+        function hideOverlay() {
+            if (!interacted) { interacted = true; overlay.classList.add('hidden'); }
+        }
 
+        /* ── Grid helpers ── */
         function resize() {
-            const wrap = canvas.parentElement;
-            COLS = Math.floor(wrap.clientWidth / CELL);
-            ROWS = Math.floor(wrap.clientHeight / CELL);
-            canvas.width = COLS * CELL;
-            canvas.height = ROWS * CELL;
-            glowCanvas.width = COLS * CELL;
-            glowCanvas.height = ROWS * CELL;
+            COLS = Math.floor(window.innerWidth / CELL);
+            ROWS = Math.floor(window.innerHeight / CELL);
+            canvas.width  = glow.width  = COLS * CELL;
+            canvas.height = glow.height = ROWS * CELL;
         }
 
         function makeArrays() {
-            cellType = new Uint8Array(ROWS * COLS);
-            cellAge = new Int16Array(ROWS * COLS);
+            const n   = ROWS * COLS;
+            cellType  = new Uint8Array(n);
+            cellAge   = new Int16Array(n);
+            ghostType = new Uint8Array(n);
         }
 
-        function idx(y, x) { return y * COLS + x; }
+        function I(y, x) { return y * COLS + x; }
 
-        function clearAll() {
-            generation = 0;
-            wave = 0;
-            gamePhase = 'draw';
-            waveActive = false;
-            running = false;
-            makeArrays();
-            btnPlay.innerHTML = '&#9654; Play';
-            btnPlay.classList.remove('active');
-            btnWave.disabled = false;
-            btnWave.textContent = 'Launch Wave';
-            hintEl.textContent = 'Draw your cells, then hit "Launch Wave" when ready.';
-            overlayClear.classList.remove('visible');
-            overlayGameover.classList.remove('visible');
-        }
-
-        function randomizeHealthy(density) {
-            generation = 0;
-            makeArrays();
-            for (let i = 0; i < ROWS * COLS; i++) {
-                if (Math.random() < (density || 0.25)) {
-                    cellType[i] = 1;
-                    cellAge[i] = 1;
-                }
-            }
-        }
-
-        // --- Color ---
-        function lerpColor(stops, t) {
+        /* ── Color ── */
+        function lerp(stops, t) {
             t = Math.max(0, Math.min(1, t));
-            const seg = t * (stops.length - 1);
-            const i = Math.floor(seg);
-            const f = seg - i;
+            const s = t * (stops.length - 1);
+            const i = Math.floor(s), f = s - i;
             const a = stops[Math.min(i, stops.length - 1)];
             const b = stops[Math.min(i + 1, stops.length - 1)];
             return [
-                Math.round(a[0] + (b[0] - a[0]) * f),
-                Math.round(a[1] + (b[1] - a[1]) * f),
-                Math.round(a[2] + (b[2] - a[2]) * f),
+                a[0] + (b[0] - a[0]) * f | 0,
+                a[1] + (b[1] - a[1]) * f | 0,
+                a[2] + (b[2] - a[2]) * f | 0,
             ];
         }
 
-        function cellColor(type, age) {
-            const pal = type === 1 ? HEALTHY_PALETTE : VIRUS_PALETTE;
-            return lerpColor(pal, Math.min(age / MAX_AGE, 1));
+        function color(type, age) {
+            return lerp(type === 1 ? LIGHT_PAL : VIRUS_PAL, Math.min(age / MAX_AGE, 1));
         }
 
-        // --- Virus wave spawning ---
-        function spawnWave(waveNum) {
-            // Waves get progressively harder:
-            // - More virus cells
-            // - Spawn from more edges
-            // - Higher density clusters
-            const density = Math.min(0.3 + waveNum * 0.05, 0.7);
-            const thickness = Math.min(2 + Math.floor(waveNum / 2), 6);
-            const edges = [];
-
-            // Wave 1: one edge. Wave 2: two edges. Wave 3+: up to all four
-            if (waveNum >= 1) edges.push('top');
-            if (waveNum >= 2) edges.push('right');
-            if (waveNum >= 3) edges.push('bottom');
-            if (waveNum >= 4) edges.push('left');
-            // After wave 4, cycle but with more thickness/density
-            if (waveNum >= 5 && !edges.includes('top')) edges.push('top');
-
-            for (const edge of edges) {
-                for (let t = 0; t < thickness; t++) {
-                    for (let i = 0; i < (edge === 'top' || edge === 'bottom' ? COLS : ROWS); i++) {
-                        if (Math.random() > density) continue;
-                        let y, x;
-                        if (edge === 'top')    { y = t; x = i; }
-                        if (edge === 'bottom') { y = ROWS - 1 - t; x = i; }
-                        if (edge === 'left')   { y = i; x = t; }
-                        if (edge === 'right')  { y = i; x = COLS - 1 - t; }
-                        if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                            const ii = idx(y, x);
-                            if (cellType[ii] === 0) {  // don't overwrite existing cells
-                                cellType[ii] = 2;
-                                cellAge[ii] = 1;
-                            }
-                        }
+        /* ── Virus spawning ── */
+        function spawnCluster() {
+            const edge = Math.random() * 4 | 0;
+            let cy, cx;
+            if (edge === 0)      { cy = 0;        cx = Math.random() * COLS | 0; }
+            else if (edge === 1) { cy = ROWS - 1;  cx = Math.random() * COLS | 0; }
+            else if (edge === 2) { cy = Math.random() * ROWS | 0; cx = 0; }
+            else                 { cy = Math.random() * ROWS | 0; cx = COLS - 1; }
+            const r = 2 + (Math.random() * 3 | 0);
+            for (let dy = -r; dy <= r; dy++)
+                for (let dx = -r; dx <= r; dx++) {
+                    if (dy * dy + dx * dx > r * r) continue;
+                    if (Math.random() > 0.6) continue;
+                    const y = cy + dy, x = cx + dx;
+                    if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                        const i = I(y, x);
+                        if (cellType[i] === 0) { cellType[i] = 2; cellAge[i] = 1; }
                     }
                 }
+        }
+
+        function spawnWave() {
+            const edge  = Math.random() * 4 | 0;
+            const thick = 2 + (Math.random() * 3 | 0);
+            const dens  = 0.3 + Math.random() * 0.25;
+            const len   = edge < 2 ? COLS : ROWS;
+            for (let t = 0; t < thick; t++)
+                for (let i = 0; i < len; i++) {
+                    if (Math.random() > dens) continue;
+                    let y, x;
+                    if (edge === 0)      { y = t;            x = i; }
+                    else if (edge === 1) { y = ROWS - 1 - t; x = i; }
+                    else if (edge === 2) { y = i;            x = t; }
+                    else                 { y = i;            x = COLS - 1 - t; }
+                    if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                        const ii = I(y, x);
+                        if (cellType[ii] === 0) { cellType[ii] = 2; cellAge[ii] = 1; }
+                    }
+                }
+        }
+
+        /* ── Particles ── */
+        function addParticle(px, py) {
+            if (particles.length >= MAX_PARTICLES) return;
+            const a = Math.random() * Math.PI * 2;
+            const v = 0.6 + Math.random() * 2.4;
+            particles.push({
+                x: px, y: py,
+                vx: Math.cos(a) * v,
+                vy: Math.sin(a) * v,
+                life: 1,
+                decay: 0.025 + Math.random() * 0.035,
+            });
+        }
+
+        function tickParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy;
+                p.vx *= 0.97; p.vy *= 0.97;
+                p.life -= p.decay;
+                if (p.life <= 0) particles.splice(i, 1);
             }
         }
 
-        // --- Simulation ---
+        function drawParticles() {
+            for (const p of particles) {
+                const a = p.life * 0.9;
+                const s = p.life * 3;
+                glCtx.fillStyle = `rgba(255,235,170,${a.toFixed(2)})`;
+                glCtx.beginPath();
+                glCtx.arc(p.x, p.y, s, 0, Math.PI * 2);
+                glCtx.fill();
+            }
+        }
+
+        /* ── Simulation ── */
         function step() {
-            const newType = new Uint8Array(ROWS * COLS);
-            const newAge = new Int16Array(ROWS * COLS);
+            const n = ROWS * COLS;
+            const nT = new Uint8Array(n);
+            const nA = new Int16Array(n);
 
             for (let y = 0; y < ROWS; y++) {
                 for (let x = 0; x < COLS; x++) {
-                    const i = idx(y, x);
-                    const type = cellType[i];
-                    const a = cellAge[i];
+                    const i = I(y, x);
+                    const t = cellType[i], a = cellAge[i];
 
-                    // Count neighbors by type
-                    let nHealthy = 0, nVirus = 0;
-                    for (let dy = -1; dy <= 1; dy++) {
+                    // Neighbor counts
+                    let nL = 0, nV = 0;
+                    for (let dy = -1; dy <= 1; dy++)
                         for (let dx = -1; dx <= 1; dx++) {
                             if (!dy && !dx) continue;
-                            const ny = (y + dy + ROWS) % ROWS;
-                            const nx = (x + dx + COLS) % COLS;
-                            const ni = idx(ny, nx);
-                            if (cellType[ni] === 1 && cellAge[ni] > 0) nHealthy++;
-                            if (cellType[ni] === 2 && cellAge[ni] > 0) nVirus++;
+                            const ni = I((y + dy + ROWS) % ROWS, (x + dx + COLS) % COLS);
+                            if (cellType[ni] === 1 && cellAge[ni] > 0) nL++;
+                            if (cellType[ni] === 2 && cellAge[ni] > 0) nV++;
                         }
-                    }
 
-                    if (type === 0 || a <= 0) {
-                        // Empty or fading cell — check for birth
-                        const healthyBirth = nHealthy === 3;
-                        const virusBirth = nVirus === 3;
-
-                        if (healthyBirth && virusBirth) {
-                            // Conflict — virus is aggressive, it wins
-                            newType[i] = 2;
-                            newAge[i] = 1;
-                        } else if (virusBirth) {
-                            newType[i] = 2;
-                            newAge[i] = 1;
-                        } else if (healthyBirth) {
-                            newType[i] = 1;
-                            newAge[i] = 1;
-                        } else {
-                            // Stay empty / continue fading
-                            newType[i] = 0;
-                            newAge[i] = a < 0 ? a + 1 : 0;
-                        }
-                    } else if (type === 1) {
-                        // Healthy cell
-                        // Check infection: if surrounded by enough virus, gets converted
-                        if (nVirus >= INFECTION_THRESHOLD) {
-                            newType[i] = 2;
-                            newAge[i] = 1;  // reborn as virus
-                        } else {
-                            // Normal GoL survival with own kind
-                            const ownNeighbors = nHealthy;
-                            if (ownNeighbors === 2 || ownNeighbors === 3) {
-                                newType[i] = 1;
-                                newAge[i] = Math.min(a + 1, MAX_AGE);
-                            } else {
-                                // Dies
-                                newType[i] = 0;
-                                newAge[i] = -FADE_FRAMES;
+                    if (t === 0 || a <= 0) {
+                        // Empty / fading — birth?
+                        const lB = nL === 3, vB = nV === 3;
+                        if (lB && vB)       { nT[i] = 1; nA[i] = 1; }   // light wins ties
+                        else if (lB)        { nT[i] = 1; nA[i] = 1; }
+                        else if (vB)        { nT[i] = 2; nA[i] = 1; }
+                        else                { nT[i] = 0; nA[i] = a < 0 ? a + 1 : 0; }
+                    } else if (t === 1) {
+                        // Light cell
+                        if (nV >= CONVERT_VIRUS)             { nT[i] = 2; nA[i] = 1; }
+                        else if (nL === 2 || nL === 3)       { nT[i] = 1; nA[i] = Math.min(a + 1, MAX_AGE); }
+                        else                                 { nT[i] = 0; nA[i] = -FADE_FRAMES; }
+                    } else {
+                        // Virus cell
+                        if (nL >= CONVERT_LIGHT) {
+                            nT[i] = 1; nA[i] = 1;  // converted to light
+                            if (Math.random() < 0.25) {
+                                const px = x * CELL + CELL / 2;
+                                const py = y * CELL + CELL / 2;
+                                addParticle(px, py);
+                                addParticle(px, py);
                             }
                         }
-                    } else if (type === 2) {
-                        // Virus cell — normal GoL with own kind
-                        const ownNeighbors = nVirus;
-                        if (ownNeighbors === 2 || ownNeighbors === 3) {
-                            newType[i] = 2;
-                            newAge[i] = Math.min(a + 1, MAX_AGE);
-                        } else {
-                            newType[i] = 0;
-                            newAge[i] = -FADE_FRAMES;
-                        }
+                        else if (nV === 2 || nV === 3)       { nT[i] = 2; nA[i] = Math.min(a + 1, MAX_AGE); }
+                        else                                 { nT[i] = 0; nA[i] = -FADE_FRAMES; }
                     }
                 }
             }
 
-            // Store previous types for ghost coloring
-            const prevType = cellType;
-            cellType = newType;
-            cellAge = newAge;
-            generation++;
-
-            // Copy previous type info for fading cells so we know what color ghost to show
-            for (let i = 0; i < ROWS * COLS; i++) {
-                if (cellType[i] === 0 && cellAge[i] < 0 && prevType[i] > 0) {
-                    // Mark ghost type in high bit area — store in a side channel
-                    // Actually, let's use a simpler approach: store ghost type
-                    ghostType[i] = prevType[i];
-                } else if (cellAge[i] >= 0) {
-                    ghostType[i] = 0;
-                }
+            // Ghost bookkeeping
+            const prev = cellType;
+            cellType = nT; cellAge = nA; steps++;
+            for (let i = 0; i < n; i++) {
+                if (cellType[i] === 0 && cellAge[i] < 0 && prev[i] > 0) ghostType[i] = prev[i];
+                else if (cellAge[i] >= 0) ghostType[i] = 0;
             }
 
-            // Check game conditions
-            if (waveActive) {
-                let healthyCount = 0, virusCount = 0;
-                for (let i = 0; i < ROWS * COLS; i++) {
-                    if (cellType[i] === 1 && cellAge[i] > 0) healthyCount++;
-                    if (cellType[i] === 2 && cellAge[i] > 0) virusCount++;
-                }
+            // Virus auto-spawn — escalates gently over time
+            vTick++; wTick++;
+            const extra = Math.min(Math.floor(steps / 800), 3);   // 0-3 extra clusters
 
-                if (healthyCount === 0) {
-                    gameOver();
-                } else if (virusCount === 0) {
-                    waveClear();
-                }
+            if (vTick >= 40) {                                     // ~2 s
+                for (let c = 0; c < 1 + extra; c++) spawnCluster();
+                vTick = 0;
+            }
+            if (wTick >= 320) {                                    // ~16 s
+                spawnWave();
+                if (extra >= 2) spawnWave();                       // double wave later
+                wTick = 0;
             }
         }
 
-        // Ghost type tracking (which type a fading cell was)
-        let ghostType;
-
-        function initGhostType() {
-            ghostType = new Uint8Array(ROWS * COLS);
-        }
-
-        function gameOver() {
-            gamePhase = 'gameover';
-            running = false;
-            waveActive = false;
-            btnPlay.innerHTML = '&#9654; Play';
-            btnPlay.classList.remove('active');
-            document.getElementById('gameover-sub').textContent =
-                wave === 1
-                    ? 'Your colony was consumed on the very first wave.'
-                    : `Your colony survived ${wave - 1} wave${wave - 1 !== 1 ? 's' : ''} before falling.`;
-            document.getElementById('gameover-stats').textContent =
-                `Final generation: ${generation}`;
-            overlayGameover.classList.add('visible');
-        }
-
-        function waveClear() {
-            gamePhase = 'waveclear';
-            running = false;
-            waveActive = false;
-            btnPlay.innerHTML = '&#9654; Play';
-            btnPlay.classList.remove('active');
-
-            let healthyCount = 0;
-            for (let i = 0; i < ROWS * COLS; i++)
-                if (cellType[i] === 1 && cellAge[i] > 0) healthyCount++;
-
-            document.getElementById('clear-sub').textContent =
-                `Wave ${wave} eradicated. ${healthyCount} healthy cells remain.`;
-            document.getElementById('clear-stats').textContent =
-                `Generation: ${generation}  |  Next wave will be harder.`;
-            overlayClear.classList.add('visible');
-        }
-
-        function launchWave() {
-            wave++;
-            waveActive = true;
-            gamePhase = 'playing';
-            running = true;
-            btnPlay.innerHTML = '&#9646;&#9646; Pause';
-            btnPlay.classList.add('active');
-            hintEl.textContent = `Wave ${wave} incoming! Survive until all virus cells die.`;
-            spawnWave(wave);
-            overlayClear.classList.remove('visible');
-        }
-
-        // --- Rendering ---
+        /* ── Rendering ── */
         function draw() {
-            ctx.fillStyle = '#05050a';
+            // Background: subtle radial vignette
+            const hw = canvas.width / 2, hh = canvas.height / 2;
+            const bgGrad = ctx.createRadialGradient(hw, hh, 0, hw, hh, Math.max(hw, hh));
+            bgGrad.addColorStop(0, '#06060e');
+            bgGrad.addColorStop(1, '#010103');
+            ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            glowCtx.clearRect(0, 0, glowCanvas.width, glowCanvas.height);
 
-            let healthyCount = 0, virusCount = 0;
+            glCtx.clearRect(0, 0, glow.width, glow.height);
+
+            const pulse = Math.sin(steps * 0.12) * 0.15 + 0.85;   // virus pulse
 
             for (let y = 0; y < ROWS; y++) {
                 for (let x = 0; x < COLS; x++) {
-                    const i = idx(y, x);
-                    const type = cellType[i];
-                    const a = cellAge[i];
+                    const i = I(y, x);
+                    const t = cellType[i], a = cellAge[i];
 
-                    if (type > 0 && a > 0) {
-                        // Alive cell
-                        if (type === 1) healthyCount++;
-                        else virusCount++;
-
-                        const [r, g, b] = cellColor(type, a);
+                    if (t > 0 && a > 0) {
+                        const [r, g, b] = color(t, a);
                         const cx = x * CELL + CELL / 2;
                         const cy = y * CELL + CELL / 2;
-                        const radius = CELL / 2 - 0.5;
+                        const rad = CELL / 2 - 0.5;
 
                         // Cell body
                         ctx.fillStyle = `rgb(${r},${g},${b})`;
                         ctx.beginPath();
-                        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
                         ctx.fill();
 
+                        // White-hot core on young light cells
+                        if (t === 1 && a < MAX_AGE * 0.4) {
+                            const ca = (1 - a / (MAX_AGE * 0.4)) * 0.85;
+                            ctx.fillStyle = `rgba(255,255,255,${ca.toFixed(2)})`;
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, rad * 0.4, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+
                         // Glow
-                        const brightness = Math.max(0.15, 1 - a / MAX_AGE);
-                        const grad = glowCtx.createRadialGradient(cx, cy, 0, cx, cy, GLOW_RADIUS);
-                        grad.addColorStop(0, `rgba(${r},${g},${b},${(0.45 * brightness).toFixed(2)})`);
+                        const bright = Math.max(0.12, 1 - a / MAX_AGE);
+                        const gR     = t === 1 ? GLOW_RADIUS * 1.5 : GLOW_RADIUS;
+                        const gA     = t === 1 ? 0.50 * bright : 0.30 * bright * pulse;
+                        const grad   = glCtx.createRadialGradient(cx, cy, 0, cx, cy, gR);
+                        grad.addColorStop(0, `rgba(${r},${g},${b},${gA.toFixed(2)})`);
                         grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-                        glowCtx.fillStyle = grad;
-                        glowCtx.fillRect(cx - GLOW_RADIUS, cy - GLOW_RADIUS, GLOW_RADIUS * 2, GLOW_RADIUS * 2);
+                        glCtx.fillStyle = grad;
+                        glCtx.fillRect(cx - gR, cy - gR, gR * 2, gR * 2);
 
                     } else if (a < 0) {
                         // Fading ghost
-                        const fadeProgress = 1 - (-a / FADE_FRAMES);
-                        const alpha = (1 - fadeProgress) * 0.45;
-                        const gt = ghostType[i];
-                        const [r, g, b] = gt === 2 ? VIRUS_GHOST : HEALTHY_GHOST;
+                        const alpha = (-a / FADE_FRAMES) * 0.45;
+                        const [r, g, b] = ghostType[i] === 2 ? VIRUS_GHOST : LIGHT_GHOST;
                         const cx = x * CELL + CELL / 2;
                         const cy = y * CELL + CELL / 2;
 
@@ -613,153 +388,105 @@
                         ctx.beginPath();
                         ctx.arc(cx, cy, CELL / 2 - 1, 0, Math.PI * 2);
                         ctx.fill();
+
+                        // Subtle ghost glow
+                        const gA  = alpha * 0.25;
+                        const gR2 = GLOW_RADIUS * 0.6;
+                        const gg  = glCtx.createRadialGradient(cx, cy, 0, cx, cy, gR2);
+                        gg.addColorStop(0, `rgba(${r},${g},${b},${gA.toFixed(2)})`);
+                        gg.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                        glCtx.fillStyle = gg;
+                        glCtx.fillRect(cx - gR2, cy - gR2, gR2 * 2, gR2 * 2);
                     }
                 }
             }
 
-            document.getElementById('stat-gen').textContent = generation;
-            document.getElementById('stat-wave').textContent = wave;
-            document.getElementById('stat-healthy').textContent = healthyCount;
-            document.getElementById('stat-virus').textContent = virusCount;
+            drawParticles();
         }
 
-        // --- Animation loop ---
-        function loop(timestamp) {
-            if (running && timestamp - lastStepTime >= simInterval) {
+        /* ── Animation loop ── */
+        function loop(ts) {
+            if (ts - lastStep >= SIM_INTERVAL) {
                 step();
-                lastStepTime = timestamp;
+                tickParticles();
+                lastStep = ts;
             }
             draw();
             requestAnimationFrame(loop);
         }
 
-        // --- Mouse / touch drawing ---
+        /* ── Drawing (mouse & touch) ── */
         function cellAt(e) {
             const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
+            const sx = canvas.width / rect.width;
+            const sy = canvas.height / rect.height;
             return [
-                Math.floor((e.clientY - rect.top) * scaleY / CELL),
-                Math.floor((e.clientX - rect.left) * scaleX / CELL),
+                (e.clientY - rect.top) * sy / CELL | 0,
+                (e.clientX - rect.left) * sx / CELL | 0,
             ];
         }
 
-        function paint(y, x) {
-            if (y < 0 || y >= ROWS || x < 0 || x >= COLS) return;
-            const i = idx(y, x);
-            if (drawValue) {
-                cellType[i] = 1; // always draw healthy
-                cellAge[i] = 1;
-            } else {
-                cellType[i] = 0;
-                cellAge[i] = 0;
-            }
+        function paintBrush(cy, cx) {
+            for (let dy = -BRUSH_RADIUS; dy <= BRUSH_RADIUS; dy++)
+                for (let dx = -BRUSH_RADIUS; dx <= BRUSH_RADIUS; dx++) {
+                    const d2 = dy * dy + dx * dx;
+                    if (d2 > BRUSH_RADIUS * BRUSH_RADIUS) continue;
+                    const d = Math.sqrt(d2);
+                    if (d > 1 && Math.random() < (d / BRUSH_RADIUS) * 0.45) continue;
+                    const y = cy + dy, x = cx + dx;
+                    if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                        const i = I(y, x);
+                        cellType[i] = 1;
+                        cellAge[i] = 1;   // white-hot
+                    }
+                }
         }
 
         canvas.addEventListener('mousedown', (e) => {
+            hideOverlay();
             const [y, x] = cellAt(e);
-            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = !(cellType[idx(y, x)] === 1 && cellAge[idx(y, x)] > 0);
-                paint(y, x);
-                drawing = true;
-            }
+            paintBrush(y, x);
+            drawing = true;
         });
         canvas.addEventListener('mousemove', (e) => {
             if (!drawing) return;
             const [y, x] = cellAt(e);
-            paint(y, x);
+            paintBrush(y, x);
         });
         window.addEventListener('mouseup', () => { drawing = false; });
 
         canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
+            e.preventDefault(); hideOverlay();
             const [y, x] = cellAt(e.touches[0]);
-            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
-                drawValue = !(cellType[idx(y, x)] === 1 && cellAge[idx(y, x)] > 0);
-                paint(y, x);
-                drawing = true;
-            }
-        }, {passive: false});
+            paintBrush(y, x);
+            drawing = true;
+        }, { passive: false });
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
             if (!drawing) return;
             const [y, x] = cellAt(e.touches[0]);
-            paint(y, x);
-        }, {passive: false});
+            paintBrush(y, x);
+        }, { passive: false });
         window.addEventListener('touchend', () => { drawing = false; });
 
-        // --- Controls ---
-        btnPlay.addEventListener('click', () => {
-            if (gamePhase === 'gameover') return;
-            running = !running;
-            btnPlay.innerHTML = running ? '&#9646;&#9646; Pause' : '&#9654; Play';
-            btnPlay.classList.toggle('active', running);
-        });
-
-        document.getElementById('btn-step').addEventListener('click', () => {
-            if (gamePhase === 'gameover') return;
-            if (running) {
-                running = false;
-                btnPlay.innerHTML = '&#9654; Play';
-                btnPlay.classList.remove('active');
-            }
-            step();
-        });
-
-        document.getElementById('btn-clear').addEventListener('click', () => {
-            clearAll();
-        });
-
-        document.getElementById('btn-random').addEventListener('click', () => {
-            clearAll();
-            randomizeHealthy();
-        });
-
-        btnWave.addEventListener('click', () => {
-            if (gamePhase === 'gameover') return;
-            launchWave();
-        });
-
-        document.getElementById('btn-next-wave').addEventListener('click', () => {
-            launchWave();
-        });
-
-        document.getElementById('btn-restart').addEventListener('click', () => {
-            overlayGameover.classList.remove('visible');
-            clearAll();
-        });
-
-        document.getElementById('sel-speed').addEventListener('change', function() {
-            simInterval = parseInt(this.value);
-        });
-
-        // --- Resize ---
+        /* ── Resize ── */
         window.addEventListener('resize', () => {
-            const oldType = cellType;
-            const oldAge = cellAge;
-            const oldGhost = ghostType;
-            const oldCols = COLS;
-            const oldRows = ROWS;
-            resize();
-            makeArrays();
-            initGhostType();
-            const copyRows = Math.min(oldRows, ROWS);
-            const copyCols = Math.min(oldCols, COLS);
-            for (let y = 0; y < copyRows; y++)
-                for (let x = 0; x < copyCols; x++) {
-                    const oi = y * oldCols + x;
-                    const ni = idx(y, x);
-                    cellType[ni] = oldType[oi];
-                    cellAge[ni] = oldAge[oi];
-                    ghostType[ni] = oldGhost[oi];
+            const oT = cellType, oA = cellAge, oG = ghostType;
+            const oC = COLS, oR = ROWS;
+            resize(); makeArrays();
+            const cr = Math.min(oR, ROWS), cc = Math.min(oC, COLS);
+            for (let y = 0; y < cr; y++)
+                for (let x = 0; x < cc; x++) {
+                    const oi = y * oC + x, ni = I(y, x);
+                    cellType[ni] = oT[oi]; cellAge[ni] = oA[oi]; ghostType[ni] = oG[oi];
                 }
         });
 
-        // --- Init ---
+        /* ── Boot ── */
         resize();
         makeArrays();
-        initGhostType();
-        randomizeHealthy();
+        // Seed a few virus clusters so there's something on screen immediately
+        for (let c = 0; c < 8; c++) spawnCluster();
         requestAnimationFrame(loop);
     })();
     </script>

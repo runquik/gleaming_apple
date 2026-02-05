@@ -116,6 +116,11 @@ main {
     margin-right: 0.25rem;
 }
 
+.card-tag.tag-light {
+    background: #3d3520;
+    color: #fbbf24;
+}
+
 .card-tag.tag-virus {
     background: #4a1a1a;
     color: #ef4444;
