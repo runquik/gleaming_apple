@@ -17,13 +17,13 @@
             <a href="experiments/001-game-of-life/" class="card">
                 <div class="card-number">001</div>
                 <div class="card-preview">
-                    <canvas id="preview-gol" width="200" height="200"></canvas>
+                    <canvas id="preview-lw" width="200" height="200"></canvas>
                 </div>
                 <div class="card-info">
-                    <h2>Game of Life: Virus Defense</h2>
-                    <p>Build your colony. Survive the infection. How many waves can you hold?</p>
-                    <span class="card-tag">game</span>
-                    <span class="card-tag tag-virus">virus</span>
+                    <h2>Light Wave</h2>
+                    <p>Create waves of light to defeat The Evil. Pure lo-fi visual stimulus.</p>
+                    <span class="card-tag tag-light">light</span>
+                    <span class="card-tag tag-evil">evil</span>
                 </div>
             </a>
 
@@ -48,121 +48,148 @@
     </footer>
 
     <script>
-    // Animated preview: green healthy vs red virus battle
+    // Animated preview: light particles vs evil blobs
     (function() {
-        const canvas = document.getElementById('preview-gol');
+        const canvas = document.getElementById('preview-lw');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const cols = 50, rows = 50;
-        const cw = canvas.width / cols, ch = canvas.height / rows;
-        const MAX_AGE = 60, FADE = 6, INF_THRESH = 3;
-        const hPal = [[255,255,255],[110,231,183],[16,185,129],[6,95,70],[139,92,246]];
-        const vPal = [[255,255,255],[252,165,165],[239,68,68],[185,28,28],[127,29,29]];
+        const W = canvas.width, H = canvas.height;
 
-        let cType = new Uint8Array(rows*cols);
-        let cAge = new Int16Array(rows*cols);
-        let ghost = new Uint8Array(rows*cols);
+        const particles = [];
+        const evils = [];
+        const sparks = [];
+        let time = 0;
 
-        // Init: healthy in center, virus on edges
-        for (let y = 0; y < rows; y++)
-            for (let x = 0; x < cols; x++) {
-                const i = y*cols+x;
-                const edge = y < 3 || y >= rows-3 || x < 3 || x >= cols-3;
-                const center = y > 12 && y < rows-12 && x > 12 && x < cols-12;
-                if (center && Math.random() < 0.35) { cType[i]=1; cAge[i]=1; }
-                else if (edge && Math.random() < 0.4) { cType[i]=2; cAge[i]=1; }
+        function spawnLight() {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.5 + Math.random() * 1.5;
+            const hue = Math.random() < 0.3 ? 45 : Math.random() < 0.5 ? 190 : 55;
+            particles.push({
+                x: W / 2 + (Math.random() - 0.5) * 40,
+                y: H / 2 + (Math.random() - 0.5) * 40,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1.0,
+                decay: 0.005 + Math.random() * 0.005,
+                radius: 1.5 + Math.random() * 1.5,
+                hue, sat: 70, lit: 80,
+            });
+        }
+
+        function spawnEvil() {
+            const colors = [
+                { h: 0, s: 70, l: 25 },
+                { h: 95, s: 55, l: 22 },
+                { h: 50, s: 65, l: 30 },
+            ];
+            const col = colors[Math.floor(Math.random() * 3)];
+            const edge = Math.floor(Math.random() * 4);
+            let x, y, vx, vy;
+            const sp = 0.2 + Math.random() * 0.3;
+            if (edge === 0) { x = 0; y = Math.random() * H; vx = sp; vy = (Math.random()-0.5)*sp; }
+            else if (edge === 1) { x = W; y = Math.random() * H; vx = -sp; vy = (Math.random()-0.5)*sp; }
+            else if (edge === 2) { x = Math.random() * W; y = 0; vx = (Math.random()-0.5)*sp; vy = sp; }
+            else { x = Math.random() * W; y = H; vx = (Math.random()-0.5)*sp; vy = -sp; }
+
+            const cells = [];
+            for (let i = 0; i < 4 + Math.floor(Math.random() * 4); i++) {
+                const a = Math.random() * Math.PI * 2;
+                const d = Math.random() * 8;
+                cells.push({ ox: Math.cos(a)*d, oy: Math.sin(a)*d, r: 1.5+Math.random()*2, phase: Math.random()*6.28, alive: true });
+            }
+            evils.push({ x, y, vx, vy, h: col.h, s: col.s, l: col.l, cells, wobble: Math.random()*6.28 });
+        }
+
+        // Init
+        for (let i = 0; i < 4; i++) spawnEvil();
+
+        function tick() {
+            time++;
+            ctx.fillStyle = 'rgba(2,2,6,0.15)';
+            ctx.fillRect(0, 0, W, H);
+
+            // Spawn light from center periodically
+            if (time % 3 === 0) spawnLight();
+            if (time % 80 === 0) spawnEvil();
+
+            // Update & draw particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy;
+                p.vx *= 0.997; p.vy *= 0.997;
+                p.life -= p.decay;
+                if (p.life <= 0 || p.x < -10 || p.x > W+10 || p.y < -10 || p.y > H+10) {
+                    particles.splice(i, 1); continue;
+                }
+                const a = p.life * 0.8;
+                const r = p.radius * p.life;
+                const gr = r * 4;
+                const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,gr);
+                g.addColorStop(0, `hsla(${p.hue},${p.sat}%,${p.lit}%,${a*0.3})`);
+                g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
+                ctx.fillStyle = g;
+                ctx.fillRect(p.x-gr,p.y-gr,gr*2,gr*2);
+                ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+                ctx.fillStyle = `hsla(${p.hue},${p.sat-10}%,${Math.min(p.lit+15,95)}%,${a})`;
+                ctx.fill();
             }
 
-        function lerp(stops, t) {
-            t = Math.max(0, Math.min(1, t));
-            const s = t*(stops.length-1), i = Math.floor(s), f = s-i;
-            const a = stops[Math.min(i,stops.length-1)], b = stops[Math.min(i+1,stops.length-1)];
-            return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
-        }
+            // Update & draw evil
+            for (let i = evils.length - 1; i >= 0; i--) {
+                const b = evils[i];
+                b.wobble += 0.04;
+                b.x += b.vx; b.y += b.vy;
+                const tcx = W/2 - b.x, tcy = H/2 - b.y;
+                const td = Math.sqrt(tcx*tcx+tcy*tcy);
+                if (td > 20) { b.vx += (tcx/td)*0.01; b.vy += (tcy/td)*0.01; }
+                const sp = Math.sqrt(b.vx*b.vx+b.vy*b.vy);
+                if (sp > 0.6) { b.vx=(b.vx/sp)*0.6; b.vy=(b.vy/sp)*0.6; }
 
-        function step() {
-            const nT = new Uint8Array(rows*cols), nA = new Int16Array(rows*cols);
-            for (let y = 0; y < rows; y++)
-                for (let x = 0; x < cols; x++) {
-                    const i = y*cols+x;
-                    let nH=0, nV=0;
-                    for (let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-                        if(!dy&&!dx) continue;
-                        const ni=((y+dy+rows)%rows)*cols+(x+dx+cols)%cols;
-                        if(cType[ni]===1&&cAge[ni]>0) nH++;
-                        if(cType[ni]===2&&cAge[ni]>0) nV++;
-                    }
-                    if(cType[i]===0||cAge[i]<=0){
-                        const hB=nH===3, vB=nV===3;
-                        if(hB&&vB){nT[i]=2;nA[i]=1;}
-                        else if(vB){nT[i]=2;nA[i]=1;}
-                        else if(hB){nT[i]=1;nA[i]=1;}
-                        else{nT[i]=0;nA[i]=cAge[i]<0?cAge[i]+1:0;}
-                    } else if(cType[i]===1){
-                        if(nV>=INF_THRESH){nT[i]=2;nA[i]=1;}
-                        else if(nH===2||nH===3){nT[i]=1;nA[i]=Math.min(cAge[i]+1,MAX_AGE);}
-                        else{nT[i]=0;nA[i]=-FADE;}
-                    } else {
-                        if(nV===2||nV===3){nT[i]=2;nA[i]=Math.min(cAge[i]+1,MAX_AGE);}
-                        else{nT[i]=0;nA[i]=-FADE;}
+                let anyAlive = false;
+                for (const c of b.cells) {
+                    if (!c.alive) continue;
+                    anyAlive = true;
+                    c.phase += 0.05;
+                    const pulse = 0.6+0.4*Math.sin(c.phase);
+                    const cx = b.x+c.ox+Math.sin(b.wobble+c.phase)*2;
+                    const cy = b.y+c.oy+Math.cos(b.wobble+c.phase*0.7)*2;
+                    const cr = c.r*(0.8+0.3*pulse);
+                    ctx.beginPath(); ctx.arc(cx,cy,cr,0,Math.PI*2);
+                    ctx.fillStyle = `hsla(${b.h},${b.s}%,${b.l+10*pulse}%,${0.7+0.3*pulse})`;
+                    ctx.fill();
+
+                    // Collision with light
+                    for (let li = particles.length - 1; li >= 0; li--) {
+                        const lp = particles[li];
+                        const dx = lp.x-cx, dy = lp.y-cy;
+                        if (dx*dx+dy*dy < (cr+lp.radius*2)**2) {
+                            c.alive = false;
+                            lp.life -= 0.2;
+                            for (let s = 0; s < 3; s++) {
+                                const sa = Math.random()*Math.PI*2, ss = 1+Math.random()*2;
+                                sparks.push({ x:cx,y:cy,vx:Math.cos(sa)*ss,vy:Math.sin(sa)*ss,life:1,h:45,s:80,l:85 });
+                            }
+                            break;
+                        }
                     }
                 }
-            const prev=cType; cType=nT; cAge=nA;
-            for(let i=0;i<rows*cols;i++){
-                if(cType[i]===0&&cAge[i]<0&&prev[i]>0) ghost[i]=prev[i];
-                else if(cAge[i]>=0) ghost[i]=0;
+                if (!anyAlive) { evils.splice(i, 1); }
             }
-            // If one side is extinct, reset
-            let h=0,v=0;
-            for(let i=0;i<rows*cols;i++){if(cType[i]===1&&cAge[i]>0)h++;if(cType[i]===2&&cAge[i]>0)v++;}
-            if(h===0||v===0) reset();
+
+            // Sparks
+            for (let i = sparks.length - 1; i >= 0; i--) {
+                const s = sparks[i];
+                s.x += s.vx; s.y += s.vy; s.vx *= 0.94; s.vy *= 0.94; s.life -= 0.03;
+                if (s.life <= 0) { sparks.splice(i, 1); continue; }
+                ctx.beginPath(); ctx.arc(s.x,s.y,1.5*s.life,0,Math.PI*2);
+                ctx.fillStyle = `hsla(${s.h},${s.s}%,${s.l}%,${s.life})`;
+                ctx.fill();
+            }
         }
 
-        function reset() {
-            cType = new Uint8Array(rows*cols);
-            cAge = new Int16Array(rows*cols);
-            ghost = new Uint8Array(rows*cols);
-            for (let y = 0; y < rows; y++)
-                for (let x = 0; x < cols; x++) {
-                    const i = y*cols+x;
-                    const edge = y < 3 || y >= rows-3 || x < 3 || x >= cols-3;
-                    const center = y > 12 && y < rows-12 && x > 12 && x < cols-12;
-                    if (center && Math.random() < 0.35) { cType[i]=1; cAge[i]=1; }
-                    else if (edge && Math.random() < 0.4) { cType[i]=2; cAge[i]=1; }
-                }
-        }
-
-        function draw() {
-            ctx.fillStyle = '#05050a';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            for (let y = 0; y < rows; y++)
-                for (let x = 0; x < cols; x++) {
-                    const i = y*cols+x, t=cType[i], a=cAge[i];
-                    if(t>0&&a>0){
-                        const pal = t===1?hPal:vPal;
-                        const [r,g,b] = lerp(pal, a/MAX_AGE);
-                        const cx=x*cw+cw/2, cy=y*ch+ch/2;
-                        const br=Math.max(0.2,1-a/MAX_AGE);
-                        const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,cw*1.5);
-                        grad.addColorStop(0,`rgba(${r|0},${g|0},${b|0},${(0.3*br).toFixed(2)})`);
-                        grad.addColorStop(1,`rgba(${r|0},${g|0},${b|0},0)`);
-                        ctx.fillStyle=grad;
-                        ctx.fillRect(cx-cw*1.5,cy-ch*1.5,cw*3,ch*3);
-                        ctx.fillStyle=`rgb(${r|0},${g|0},${b|0})`;
-                        ctx.beginPath(); ctx.arc(cx,cy,cw/2-0.3,0,Math.PI*2); ctx.fill();
-                    } else if(a<0){
-                        const alpha=(-a/FADE)*0.3;
-                        const [r,g,b]=ghost[i]===2?[120,30,30]:[80,60,120];
-                        const cx=x*cw+cw/2, cy=y*ch+ch/2;
-                        ctx.fillStyle=`rgba(${r},${g},${b},${alpha.toFixed(2)})`;
-                        ctx.beginPath(); ctx.arc(cx,cy,cw/2-0.5,0,Math.PI*2); ctx.fill();
-                    }
-                }
-        }
-
-        function tick() { step(); draw(); }
-        draw();
-        setInterval(tick, 80);
+        ctx.fillStyle = '#020206';
+        ctx.fillRect(0, 0, W, H);
+        setInterval(tick, 50);
     })();
 
     // Text preview for Office Hell
