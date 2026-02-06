@@ -121,6 +121,16 @@ main {
     color: #ef4444;
 }
 
+.card-tag.tag-light {
+    background: #2a3a4a;
+    color: #aae8ff;
+}
+
+.card-tag.tag-evil {
+    background: #3a2a1a;
+    color: #d4a040;
+}
+
 footer {
     text-align: center;
     padding: 3rem 2rem;
