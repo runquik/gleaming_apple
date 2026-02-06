@@ -48,40 +48,87 @@
     </footer>
 
     <script>
-    // Animated preview: light particles vs evil blobs
+    // Self-playing Light Wave preview with trail system + stampedes
     (function() {
         const canvas = document.getElementById('preview-lw');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const W = canvas.width, H = canvas.height;
 
-        const particles = [];
+        // Trail lifecycle (scaled-down durations for 50ms tick preview)
+        const GROW = 0, GLEAM = 1, FLOW = 2, FADE = 3;
+        const DUR = [200, 300, 600, 200]; // shorter for preview
+        const TOTAL = DUR[0] + DUR[1] + DUR[2] + DUR[3];
+        const MAX_PTS = 60;
+
+        const trail = [];
         const evils = [];
         const sparks = [];
         let time = 0;
 
-        function spawnLight() {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 0.5 + Math.random() * 1.5;
-            const hue = Math.random() < 0.3 ? 45 : Math.random() < 0.5 ? 190 : 55;
-            particles.push({
-                x: W / 2 + (Math.random() - 0.5) * 40,
-                y: H / 2 + (Math.random() - 0.5) * 40,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                life: 1.0,
-                decay: 0.005 + Math.random() * 0.005,
-                radius: 1.5 + Math.random() * 1.5,
-                hue, sat: 70, lit: 80,
+        // Auto-cursor: Lissajous path
+        let cursorX = W / 2, cursorY = H / 2;
+
+        function easeOut(t) { return 1 - (1 - t) * (1 - t); }
+
+        function emitTrailPt(x, y, vx, vy) {
+            const speed = Math.sqrt(vx * vx + vy * vy);
+            let nx, ny;
+            if (speed > 0.3) { nx = -vy / speed; ny = vx / speed; }
+            else { const a = Math.random() * Math.PI * 2; nx = Math.cos(a); ny = Math.sin(a); }
+            if (Math.random() < 0.5) { nx = -nx; ny = -ny; }
+
+            const hue = Math.random() < 0.35 ? 45 + Math.random() * 15 :
+                        Math.random() < 0.5  ? 185 + Math.random() * 25 : 55 + Math.random() * 15;
+
+            trail.push({
+                x, y, originX: x, originY: y, nx, ny, age: 0, hue,
+                sat: 50 + Math.random() * 30, lit: 70 + Math.random() * 20,
+                radius: 0.5, brightness: 0.1, phase: GROW,
+                sineOff: Math.random() * Math.PI * 2,
+                flowSpd: 0.5 + Math.random() * 0.4,
+                dmgR: 4,
             });
+            if (trail.length > MAX_PTS) trail.splice(0, trail.length - MAX_PTS);
+        }
+
+        function updatePt(p, dt) {
+            p.age += dt;
+            if (p.age < DUR[0]) {
+                p.phase = GROW;
+                const t = p.age / DUR[0];
+                p.radius = 0.5 + 3 * easeOut(t);
+                p.brightness = 0.1 + 0.7 * easeOut(t);
+            } else if (p.age < DUR[0] + DUR[1]) {
+                p.phase = GLEAM;
+                p.radius = 3.5 + Math.sin(p.age * 0.02 + p.sineOff) * 0.4;
+                p.brightness = 0.85 + 0.15 * Math.sin(p.age * 0.015 + p.sineOff);
+            } else if (p.age < DUR[0] + DUR[1] + DUR[2]) {
+                p.phase = FLOW;
+                const t = (p.age - DUR[0] - DUR[1]) / DUR[2];
+                const drift = t * 20 * p.flowSpd;
+                const sine = Math.sin(t * Math.PI * 3 + p.sineOff) * 6;
+                p.x = p.originX + p.nx * drift + p.ny * sine;
+                p.y = p.originY + p.ny * drift - p.nx * sine;
+                p.radius = 3.5 + t * 1;
+                p.brightness = 1.0 - t * 0.7;
+            } else if (p.age < TOTAL) {
+                p.phase = FADE;
+                const t = (p.age - DUR[0] - DUR[1] - DUR[2]) / DUR[3];
+                const prevDrift = 20 * p.flowSpd;
+                const drift = prevDrift + (1 - t) * 3;
+                const sine = Math.sin(Math.PI * 3 + p.sineOff + t * 0.5) * 6 * (1 - t);
+                p.x = p.originX + p.nx * drift + p.ny * sine;
+                p.y = p.originY + p.ny * drift - p.nx * sine;
+                p.radius = 4.5;
+                p.brightness = 0.3 * (1 - t);
+            } else {
+                p.brightness = 0;
+            }
         }
 
         function spawnEvil() {
-            const colors = [
-                { h: 0, s: 70, l: 25 },
-                { h: 95, s: 55, l: 22 },
-                { h: 50, s: 65, l: 30 },
-            ];
+            const colors = [{ h: 0, s: 70, l: 25 }, { h: 95, s: 55, l: 22 }, { h: 50, s: 65, l: 30 }];
             const col = colors[Math.floor(Math.random() * 3)];
             const edge = Math.floor(Math.random() * 4);
             let x, y, vx, vy;
@@ -90,56 +137,70 @@
             else if (edge === 1) { x = W; y = Math.random() * H; vx = -sp; vy = (Math.random()-0.5)*sp; }
             else if (edge === 2) { x = Math.random() * W; y = 0; vx = (Math.random()-0.5)*sp; vy = sp; }
             else { x = Math.random() * W; y = H; vx = (Math.random()-0.5)*sp; vy = -sp; }
-
             const cells = [];
-            for (let i = 0; i < 4 + Math.floor(Math.random() * 4); i++) {
-                const a = Math.random() * Math.PI * 2;
-                const d = Math.random() * 8;
-                cells.push({ ox: Math.cos(a)*d, oy: Math.sin(a)*d, r: 1.5+Math.random()*2, phase: Math.random()*6.28, alive: true });
+            for (let i = 0; i < 3 + Math.floor(Math.random() * 4); i++) {
+                const a = Math.random() * Math.PI * 2, d = Math.random() * 6;
+                cells.push({ ox: Math.cos(a)*d, oy: Math.sin(a)*d, r: 1+Math.random()*1.5, phase: Math.random()*6.28, alive: true });
             }
             evils.push({ x, y, vx, vy, h: col.h, s: col.s, l: col.l, cells, wobble: Math.random()*6.28 });
         }
 
-        // Init
-        for (let i = 0; i < 4; i++) spawnEvil();
+        // Mini stampede state machine (6s calm, burst 6-10)
+        let spState = 'calm', spClock = 0, stragTimer = 0;
+        let stCount = 0, stSpawned = 0, stInterval = 0, stSub = 0;
+        const CALM = 6000, STAM_DUR = 400;
+
+        function updateSpawner(dt) {
+            spClock += dt;
+            if (spState === 'calm') {
+                stragTimer += dt;
+                if (stragTimer > 2000 && evils.length < 3) { spawnEvil(); stragTimer = 0; }
+                if (spClock > CALM) {
+                    spState = 'stampede'; spClock = 0;
+                    stCount = 6 + Math.floor(Math.random() * 5);
+                    stSpawned = 0; stInterval = STAM_DUR / stCount; stSub = 0;
+                }
+            } else {
+                stSub += dt;
+                while (stSub >= stInterval && stSpawned < stCount) { spawnEvil(); stSpawned++; stSub -= stInterval; }
+                if (stSpawned >= stCount) { spState = 'calm'; spClock = 0; stragTimer = 0; }
+            }
+        }
+
+        // Init evils
+        for (let i = 0; i < 3; i++) spawnEvil();
 
         function tick() {
             time++;
+            const dt = 50; // fixed tick
             ctx.fillStyle = 'rgba(2,2,6,0.15)';
             ctx.fillRect(0, 0, W, H);
 
-            // Spawn light from center periodically
-            if (time % 3 === 0) spawnLight();
-            if (time % 80 === 0) spawnEvil();
+            // Auto-cursor: Lissajous
+            const t = time * 0.02;
+            const prevCX = cursorX, prevCY = cursorY;
+            cursorX = W / 2 + Math.sin(t * 1.3) * 55;
+            cursorY = H / 2 + Math.sin(t * 0.9) * 55;
+            const cvx = cursorX - prevCX, cvy = cursorY - prevCY;
 
-            // Update & draw particles
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.x += p.vx; p.y += p.vy;
-                p.vx *= 0.997; p.vy *= 0.997;
-                p.life -= p.decay;
-                if (p.life <= 0 || p.x < -10 || p.x > W+10 || p.y < -10 || p.y > H+10) {
-                    particles.splice(i, 1); continue;
-                }
-                const a = p.life * 0.8;
-                const r = p.radius * p.life;
-                const gr = r * 4;
-                const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,gr);
-                g.addColorStop(0, `hsla(${p.hue},${p.sat}%,${p.lit}%,${a*0.3})`);
-                g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
-                ctx.fillStyle = g;
-                ctx.fillRect(p.x-gr,p.y-gr,gr*2,gr*2);
-                ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
-                ctx.fillStyle = `hsla(${p.hue},${p.sat-10}%,${Math.min(p.lit+15,95)}%,${a})`;
-                ctx.fill();
+            // Emit trail point every other tick
+            if (time % 2 === 0) emitTrailPt(cursorX, cursorY, cvx, cvy);
+
+            // Update trail
+            for (let i = trail.length - 1; i >= 0; i--) {
+                updatePt(trail[i], dt);
+                if (trail[i].brightness <= 0 && trail[i].age >= TOTAL) trail.splice(i, 1);
             }
+
+            // Spawner
+            updateSpawner(dt);
 
             // Update & draw evil
             for (let i = evils.length - 1; i >= 0; i--) {
                 const b = evils[i];
                 b.wobble += 0.04;
                 b.x += b.vx; b.y += b.vy;
-                const tcx = W/2 - b.x, tcy = H/2 - b.y;
+                const tcx = W/2-b.x, tcy = H/2-b.y;
                 const td = Math.sqrt(tcx*tcx+tcy*tcy);
                 if (td > 20) { b.vx += (tcx/td)*0.01; b.vy += (tcy/td)*0.01; }
                 const sp = Math.sqrt(b.vx*b.vx+b.vy*b.vy);
@@ -158,13 +219,14 @@
                     ctx.fillStyle = `hsla(${b.h},${b.s}%,${b.l+10*pulse}%,${0.7+0.3*pulse})`;
                     ctx.fill();
 
-                    // Collision with light
-                    for (let li = particles.length - 1; li >= 0; li--) {
-                        const lp = particles[li];
-                        const dx = lp.x-cx, dy = lp.y-cy;
-                        if (dx*dx+dy*dy < (cr+lp.radius*2)**2) {
+                    // Collision with trail
+                    for (let ti = trail.length - 1; ti >= 0; ti--) {
+                        const tp = trail[ti];
+                        if (tp.brightness < 0.5) continue;
+                        const dx = tp.x-cx, dy = tp.y-cy;
+                        if (dx*dx+dy*dy < (tp.dmgR+cr)**2) {
                             c.alive = false;
-                            lp.life -= 0.2;
+                            tp.brightness = Math.max(tp.brightness - 0.15, 0);
                             for (let s = 0; s < 3; s++) {
                                 const sa = Math.random()*Math.PI*2, ss = 1+Math.random()*2;
                                 sparks.push({ x:cx,y:cy,vx:Math.cos(sa)*ss,vy:Math.sin(sa)*ss,life:1,h:45,s:80,l:85 });
@@ -173,7 +235,57 @@
                         }
                     }
                 }
-                if (!anyAlive) { evils.splice(i, 1); }
+                if (!anyAlive) evils.splice(i, 1);
+                if (b.x < -30 || b.x > W+30 || b.y < -30 || b.y > H+30) evils.splice(i, 1);
+            }
+
+            // Draw trail — connected (GROW/GLEAM) as line segments, flowing as dots
+            ctx.lineCap = 'round';
+            const conn = [], flow = [];
+            for (const p of trail) {
+                if (p.brightness <= 0) continue;
+                if (p.phase === GROW || p.phase === GLEAM) conn.push(p);
+                else flow.push(p);
+            }
+
+            if (conn.length > 1) {
+                const saved = ctx.globalCompositeOperation;
+                ctx.globalCompositeOperation = 'lighter';
+                const passes = [{ w: 8, a: 0.08 }, { w: 3.5, a: 0.2 }, { w: 1.2, a: 0.7 }];
+                for (const pass of passes) {
+                    ctx.beginPath();
+                    ctx.moveTo(conn[0].x, conn[0].y);
+                    for (let i = 1; i < conn.length; i++) ctx.lineTo(conn[i].x, conn[i].y);
+                    const avg = conn.reduce((s, p) => s + p.brightness, 0) / conn.length;
+                    const mid = conn[Math.floor(conn.length / 2)];
+                    ctx.strokeStyle = `hsla(${mid.hue},${mid.sat}%,${Math.min(mid.lit+10,97)}%,${avg*pass.a})`;
+                    ctx.lineWidth = pass.w * Math.max(avg, 0.3);
+                    ctx.stroke();
+                }
+                ctx.globalCompositeOperation = saved;
+            }
+
+            // GLEAM halos
+            for (const p of conn) {
+                if (p.phase !== GLEAM) continue;
+                const r = p.radius * 2.5;
+                const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
+                g.addColorStop(0, `hsla(0,0%,100%,${p.brightness*0.4})`);
+                g.addColorStop(0.3, `hsla(${p.hue},${p.sat}%,${p.lit}%,${p.brightness*0.15})`);
+                g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
+                ctx.fillStyle = g;
+                ctx.fillRect(p.x-r,p.y-r,r*2,r*2);
+            }
+
+            // Flowing dots
+            for (const p of flow) {
+                const r = p.radius;
+                const gr = r * 2.5;
+                const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,gr);
+                g.addColorStop(0, `hsla(${p.hue},${p.sat}%,${Math.min(p.lit+15,97)}%,${p.brightness*0.5})`);
+                g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
+                ctx.fillStyle = g;
+                ctx.fillRect(p.x-gr,p.y-gr,gr*2,gr*2);
             }
 
             // Sparks
