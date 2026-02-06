@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>002 — Office Hell</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --border: #1e1e2e;
+            --text: #c8c8d0;
+            --text-dim: #6b6b80;
+            --item: #facc15;
+            --npc: #38bdf8;
+            --exit: #4ade80;
+            --command: #c084fc;
+            --danger: #f87171;
+        }
+
+        body {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .title-area {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .back {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.75rem;
+        }
+        .back:hover { color: var(--item); }
+
+        header h1 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--danger);
+        }
+
+        .stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        .stats span { color: var(--text); }
+        .stats .class-label { color: var(--command); }
+
+        .commands-bar {
+            padding: 0.5rem 1rem;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+        .commands-bar code {
+            color: var(--command);
+            margin-right: 0.75rem;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #output {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            line-height: 1.7;
+            font-size: 0.85rem;
+        }
+
+        #output p {
+            margin-bottom: 0.75rem;
+            max-width: 70ch;
+        }
+
+        #output .room-title {
+            color: var(--exit);
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        #output .system {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        #output .error {
+            color: var(--danger);
+        }
+
+        #output .magic-reveal {
+            color: var(--command);
+            text-shadow: 0 0 10px var(--command);
+        }
+
+        .item { color: var(--item); }
+        .npc { color: var(--npc); }
+        .exit { color: var(--exit); }
+        .cmd { color: var(--command); }
+
+        .input-area {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .input-area span {
+            color: var(--command);
+            font-size: 0.9rem;
+        }
+
+        #input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        #input::placeholder {
+            color: var(--text-dim);
+        }
+
+        /* Ending overlay */
+        .ending-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 10, 15, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 2rem;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        .ending-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .ending-overlay h2 {
+            font-size: 1.5rem;
+            color: var(--item);
+            margin-bottom: 1rem;
+        }
+        .ending-overlay p {
+            max-width: 50ch;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+            color: var(--text-dim);
+        }
+        .ending-overlay .ending-type {
+            color: var(--exit);
+            font-size: 0.8rem;
+            margin-top: 1rem;
+        }
+        .ending-overlay button {
+            margin-top: 1.5rem;
+            padding: 0.5rem 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .ending-overlay button:hover {
+            border-color: var(--item);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="title-area">
+            <a href="../../" class="back">&larr; back</a>
+            <h1>OFFICE HELL</h1>
+        </div>
+        <div class="stats">
+            <span id="stat-class"></span>
+            <span>Coffee: <span id="stat-coffee">0</span></span>
+        </div>
+    </header>
+
+    <div class="commands-bar">
+        <code>/look</code>
+        <code>/go</code>
+        <code>/take</code>
+        <code>/use</code>
+        <code>/talk</code>
+        <code>/inv</code>
+        <code>/help</code>
+    </div>
+
+    <main>
+        <div id="output"></div>
+    </main>
+
+    <div class="input-area">
+        <span>&gt;</span>
+        <input type="text" id="input" placeholder="Type a command..." autocomplete="off" autofocus>
+    </div>
+
+    <div class="ending-overlay" id="ending-overlay">
+        <h2 id="ending-title">ENDING UNLOCKED</h2>
+        <p id="ending-text"></p>
+        <p class="ending-type" id="ending-type"></p>
+        <button id="btn-restart">Play Again</button>
+    </div>
+
+    <script>
+    (function() {
+        // ==================== GAME DATA ====================
+
+        const ROOMS = {
+            'elevator-lobby': {
+                name: 'Elevator Lobby',
+                description: `The elevator doors wheeze shut behind you with the enthusiasm of a dying accordion. You're on Floor 7. The fluorescent lights flicker in what you've come to recognize as their standard passive-aggressive greeting.
+
+A <span class="item">MOTIVATIONAL POSTER</span> on the wall says "HANG IN THERE" with a picture of a cat. The cat looks like it's given up.
+
+<span class="npc">RECEPTIONIST MARGE</span> sits at a desk, aggressively not making eye contact.`,
+                exits: { south: 'cubicle-farm' },
+                items: ['poster'],
+                npcs: ['marge'],
+            },
+            'cubicle-farm': {
+                name: 'Cubicle Farm',
+                description: `Rows upon rows of identical gray cubicles stretch before you like a fabric-walled purgatory. The sound of keyboards clicking mingles with passive-aggressive sighing.
+
+A <span class="item">PRINTER</span> blinks menacingly in the corner, forever claiming it's out of toner. It's lying.
+
+You can see <span class="npc">KAREN FROM HR</span> patrolling the aisles with her clipboard.`,
+                exits: { north: 'elevator-lobby', south: 'your-cubicle', east: 'break-room', west: 'supply-closet' },
+                items: ['printer'],
+                npcs: ['karen'],
+            },
+            'your-cubicle': {
+                name: 'Your Cubicle',
+                description: `Ah, your kingdom. A 6x6 foot empire of beige. A <span class="item">DEAD PLANT</span> sits on your desk, a monument to your inability to nurture anything, including your career.
+
+Your <span class="item">COMPUTER</span> hums with 347 unread emails. The <span class="item">DESK DRAWER</span> is slightly ajar.
+
+A <span class="item">STICKY NOTE</span> is half-hidden under the plant.`,
+                exits: { north: 'cubicle-farm', east: 'broom-closet' },
+                items: ['plant', 'computer', 'drawer', 'sticky-note'],
+                npcs: [],
+            },
+            'break-room': {
+                name: 'Break Room',
+                description: `The break room smells of burnt popcorn and broken dreams. Someone's <span class="item">LUNCH</span> is in the fridge with a passive-aggressive note that says "THIS IS MINE - TODD."
+
+A <span class="item">COFFEE MACHINE</span> gurgles ominously in the corner, promising caffeine but delivering only lukewarm despair.
+
+<span class="npc">THE JANITOR</span> mops the same spot he's been mopping for the last three years.`,
+                exits: { west: 'cubicle-farm', south: 'broom-closet' },
+                items: ['lunch', 'coffee-machine', 'fridge'],
+                npcs: ['janitor'],
+            },
+            'supply-closet': {
+                name: 'Supply Closet',
+                description: `A cramped closet full of office supplies that nobody is allowed to take without filling out Form 27B-Stroke-6 in triplicate.
+
+Wait. In the back, behind the boxes of paperclips... is that a <span class="item">GLOWING STAPLER</span>? No, that can't be right. Staplers don't glow. Do they?
+
+There's also a normal <span class="item">PEN</span> and some <span class="item">PAPER</span>.`,
+                exits: { east: 'cubicle-farm' },
+                items: ['stapler', 'pen', 'paper'],
+                npcs: [],
+            },
+            'broom-closet': {
+                name: 'Broom Closet',
+                get description() {
+                    if (!state.flags.closetOpened) {
+                        return `A door labeled "SUPPLIES - AUTHORIZED PERSONNEL ONLY." It's slightly ajar. You can smell cleaning products and... something else. Ozone, maybe?
+
+You could <span class="cmd">/go inside</span> to investigate.`;
+                    }
+                    if (!state.flags.magicDiscovered) {
+                        return `The closet is... bigger on the inside? Way bigger. There's a <span class="item">DESK</span>. There are <span class="item">BOOKSHELVES</span>. Candles float in the air, which is absolutely a fire code violation. A <span class="item">SPELLBOOK</span> sits open on the desk, glowing faintly.
+
+You blink. This is fine. Everything is fine.`;
+                    }
+                    return `The wizard's study. Floating candles illuminate a cluttered <span class="item">DESK</span> covered in arcane notes. The <span class="item">SPELLBOOK</span> pulses gently. A <span class="item">POTION</span> labeled "LIQUID COURAGE" sits on a shelf.
+
+This is your life now. You work in an office with a secret wizard study. Cool.`;
+                },
+                exits: { west: 'your-cubicle', north: 'break-room' },
+                get items() {
+                    if (!state.flags.closetOpened) return [];
+                    if (!state.flags.magicDiscovered) return ['spellbook', 'desk-wizard'];
+                    return ['spellbook', 'desk-wizard', 'courage-potion'];
+                },
+                npcs: [],
+                onEnter: function() {
+                    if (!state.flags.closetOpened) {
+                        state.flags.closetOpened = true;
+                        return `<p class="magic-reveal">You push open the door expecting mops. Possibly cleaning supplies. Maybe that weird smell would finally be explained.</p>
+<p class="magic-reveal">Instead, the closet is... bigger on the inside?</p>
+<p>There's a desk. There are bookshelves. Candles float in the air, which is absolutely a fire code violation.</p>
+<p><em>"What,"</em> you say aloud, to no one, <em>"the actual hell."</em></p>`;
+                    }
+                    return null;
+                }
+            },
+            'boss-office': {
+                name: "Greg's Office",
+                description: `The corner office. <span class="npc">GREG</span>, your boss, sits behind a desk roughly the size of a small aircraft carrier. Motivational posters line the walls, but these ones are framed. Fancy.
+
+A large <span class="item">WINDOW</span> offers a view of the city below. Greg's <span class="item">NAMEPLATE</span> reads "GREG HENDERSON - REGIONAL MANAGER OF SYNERGY."
+
+Wait. Henderson. As in... the Henderson Report?`,
+                exits: { north: 'cubicle-farm' },
+                items: ['window', 'nameplate', 'greg-desk'],
+                npcs: ['greg'],
+                locked: true,
+                onEnter: function() {
+                    if (!state.flags.metGreg) {
+                        state.flags.metGreg = true;
+                        return `<p>Greg looks up from his computer. "Ah! You! Have you finished the Henderson Report? It's very important. To synergy."</p>
+<p>He has no idea what the Henderson Report is. Neither do you. Neither does anyone.</p>`;
+                    }
+                    return null;
+                }
+            }
+        };
+
+        const ITEMS = {
+            'poster': {
+                name: 'Motivational Poster',
+                description: `The poster shows a cat hanging from a branch. "HANG IN THERE" it says. The cat's eyes are dead. It has accepted its fate. So have you.`,
+                takeable: false,
+            },
+            'printer': {
+                name: 'Printer',
+                description: `The printer claims it's out of toner. It's been "out of toner" for six months. The IT guy says there's nothing wrong with it. The printer knows what it did.`,
+                takeable: false,
+                onUse: function() {
+                    if (state.flags.triedPrinter) {
+                        return `You've already tried. The printer has won. Accept defeat.`;
+                    }
+                    state.flags.triedPrinter = true;
+                    state.actions.push('kicked-printer');
+                    return `You kick the printer. It makes a sound like laughter. Nothing prints. But you feel slightly better.`;
+                }
+            },
+            'plant': {
+                name: 'Dead Plant',
+                description: `You gaze upon the desiccated remains of what was once a "low maintenance" succulent. HR gave it to you on your first day, calling it a "desk buddy." That was three years ago. The plant lasted two weeks. You've kept the corpse as a reminder that nothing survives here.`,
+                takeable: false,
+            },
+            'sticky-note': {
+                name: 'Sticky Note',
+                description: `The sticky note reads: "THE KEY IS IN THE DRAWER. THE DRAWER IS IN YOUR HEART. - A"
+
+What does that even mean? Who is A?`,
+                takeable: true,
+                onTake: function() {
+                    state.actions.push('found-note');
+                    return `You pocket the cryptic note. A for... Aldric? Allan? Accounts Payable?`;
+                }
+            },
+            'computer': {
+                name: 'Computer',
+                description: `347 unread emails. 342 of them are reply-all chains. 4 are meeting invites for meetings that already happened. 1 is from an address you don't recognize. The subject line says: "THEY KNOW."`,
+                takeable: false,
+                onUse: function() {
+                    return `You scroll through emails. Your soul leaves your body temporarily. It's a normal Monday.`;
+                }
+            },
+            'drawer': {
+                name: 'Desk Drawer',
+                get description() {
+                    if (state.flags.drawerOpened) {
+                        return `The drawer is empty now. You've taken everything of value. Which was almost nothing.`;
+                    }
+                    return `A drawer. It might contain something useful. Or office supplies. Same thing, really.`;
+                },
+                takeable: false,
+                onUse: function() {
+                    if (state.flags.drawerOpened) {
+                        return `The drawer is empty. You've already ransacked your own desk. This is what your life has become.`;
+                    }
+                    state.flags.drawerOpened = true;
+                    state.inventory.push('elevator-key');
+                    state.actions.push('opened-drawer');
+                    return `You open the drawer. Inside you find: a paper clip, a rubber band, a mysterious <span class="item">ELEVATOR KEY</span> you don't remember putting there, and a photo of yourself looking happy. That last one must be from before you worked here.
+
+You take the key. You leave the photo. Some things are better left in drawers.`;
+                }
+            },
+            'elevator-key': {
+                name: 'Elevator Key',
+                description: `A small brass key. It says "FREEDOM" on one side and "LOL JK" on the other. Very corporate.`,
+                takeable: true,
+            },
+            'coffee-machine': {
+                name: 'Coffee Machine',
+                description: `The coffee machine has a handwritten sign: "BREW TIME: 4 MINUTES. DO NOT UNPLUG. I'M WATCHING." The handwriting looks... arcane?`,
+                takeable: false,
+                onUse: function() {
+                    if (state.coffee >= 3) {
+                        return `You've had enough coffee. Any more and you'll vibrate through walls. Actually, given recent revelations about this office, that might be literal.`;
+                    }
+                    state.coffee++;
+                    state.actions.push('drank-coffee');
+                    if (state.flags.magicDiscovered) {
+                        return `You brew a cup of coffee. As you drink, you feel magical energy flowing through you. <span class="magic-reveal">+1 Mana restored.</span> The coffee machine hums approvingly.`;
+                    }
+                    return `You brew a cup of coffee. It tastes like someone dissolved a motivational poster in hot water. But it's caffeine, and caffeine is life. You feel slightly more capable of existing.`;
+                }
+            },
+            'lunch': {
+                name: "Todd's Lunch",
+                description: `A sad sandwich in a plastic container. The note says "THIS IS MINE - TODD." Todd has underlined "MINE" three times.`,
+                takeable: true,
+                onTake: function() {
+                    state.actions.push('stole-lunch');
+                    return `You take Todd's lunch. Somewhere in the building, Todd feels a disturbance. You don't care. You're a survivor now.`;
+                }
+            },
+            'fridge': {
+                name: 'Break Room Fridge',
+                description: `The fridge contains: three yogurts that expired during the last presidential administration, someone's "health smoothie" that has achieved sentience, and Todd's lunch.`,
+                takeable: false,
+            },
+            'pen': {
+                name: 'Pen',
+                description: `A standard ballpoint pen. It says "SYNERGY SOLUTIONS" on the side. It works. Barely.`,
+                takeable: true,
+            },
+            'paper': {
+                name: 'Paper',
+                description: `A blank sheet of paper. The possibilities are endless. So is your existential dread.`,
+                takeable: true,
+            },
+            'stapler': {
+                name: 'Glowing Stapler',
+                get description() {
+                    if (state.flags.magicDiscovered) {
+                        return `The stapler glows with an inner light. Runes are etched along its side. This is clearly the legendary <span class="magic-reveal">+1 STAPLER OF SMITING</span>. How it ended up in an office supply closet is a mystery for the ages.`;
+                    }
+                    return `A red stapler that seems to... glow? No, that's just the fluorescent lights. Right? It feels warm to the touch. Staplers shouldn't be warm.`;
+                },
+                takeable: true,
+                onTake: function() {
+                    state.actions.push('took-stapler');
+                    if (state.flags.magicDiscovered) {
+                        return `You take the <span class="magic-reveal">+1 Stapler of Smiting</span>. It hums with ancient power. Also it's really good at stapling.`;
+                    }
+                    return `You take the stapler. It feels important somehow. Like destiny, but with office supplies.`;
+                }
+            },
+            'spellbook': {
+                name: 'Spellbook',
+                description: `The spellbook's pages turn on their own, settling on a page titled "SPELLS FOR THE GAINFULLY EMPLOYED." Available spells include: EXPEDITE (speeds up bureaucratic processes), DEFENESTRATE (self-explanatory), and TELEPORT (requires 3 coffee).`,
+                takeable: true,
+                onTake: function() {
+                    if (!state.flags.magicDiscovered) {
+                        state.flags.magicDiscovered = true;
+                        state.flags.foundSpellbook = true;
+                        // Assign class based on actions
+                        assignClass();
+                        return `<p class="magic-reveal">You touch the spellbook. It feels like electricity and Monday mornings.</p>
+<p class="magic-reveal">The book flips open. Words appear on the page, written in light:</p>
+<p class="magic-reveal">"AH. ANOTHER SOUL SEEKS ESCAPE FROM THE FLUORESCENT DEPTHS. LET US SEE WHAT YOU ARE MADE OF..."</p>
+<p>The book seems to read your very essence. Your LinkedIn profile flashes before your eyes.</p>
+<p class="magic-reveal">"YOU ARE... ${state.class.toUpperCase()}."</p>
+<p>${getClassDescription()}</p>
+<p>You take the spellbook. Your life will never be the same. Neither will your employee reviews.</p>`;
+                    }
+                    return `You already have the spellbook. Its weight in your bag is a constant reminder that your office has a secret wizard study.`;
+                }
+            },
+            'courage-potion': {
+                name: 'Liquid Courage',
+                description: `A small vial labeled "LIQUID COURAGE - FOR WHEN YOU FINALLY WANT TO TELL THEM WHAT YOU REALLY THINK." The liquid shimmers with determination.`,
+                takeable: true,
+                onTake: function() {
+                    state.flags.hasCourage = true;
+                    return `You take the potion. Your hands are steadier already. Or that might be the coffee.`;
+                }
+            },
+            'desk-wizard': {
+                name: 'Wizard Desk',
+                description: `The desk is covered in papers. Most are indecipherable arcane formulas. One is a W-2 form. Even wizards have to pay taxes, apparently.`,
+                takeable: false,
+            },
+            'window': {
+                name: 'Office Window',
+                description: `A large window overlooking the city. It's a long way down. The window is the kind that can open, which seems like a safety hazard. Then again, so is this entire job.`,
+                takeable: false,
+            },
+            'nameplate': {
+                name: "Greg's Nameplate",
+                description: `"GREG HENDERSON - REGIONAL MANAGER OF SYNERGY." Wait. Henderson. The Henderson Report is named after... Greg? Has the report been about Greg this whole time? What does that even MEAN?`,
+                takeable: false,
+            },
+            'greg-desk': {
+                name: "Greg's Desk",
+                description: `A massive mahogany desk. On it: a computer, a World's Okayest Boss mug, and a framed photo of Greg shaking hands with a slightly more successful version of Greg.`,
+                takeable: false,
+            },
+            'resignation-letter': {
+                name: 'Resignation Letter',
+                description: `Your resignation letter. It's beautifully written. It says exactly what you've wanted to say for three years. The pen is mightier than the sword. Especially when the sword is in a supply closet and you need a Form 27B to access it.`,
+                takeable: true,
+            }
+        };
+
+        const NPCS = {
+            'marge': {
+                name: 'Receptionist Marge',
+                description: `Marge has been the receptionist here for longer than anyone can remember. Some say she was here when the building was constructed. Some say she IS the building. She does not look up from her computer.`,
+                get dialogue() {
+                    if (state.flags.talkedToMarge) {
+                        return `Marge continues not looking at you. "Badge." She points at the sign that says "ALL VISITORS MUST SIGN IN." You work here. She knows you work here. This is the game now.`;
+                    }
+                    state.flags.talkedToMarge = true;
+                    state.actions.push('talked-marge');
+                    return `"Badge," Marge says, not looking up. You show her your badge. She squints at it for approximately seventeen years. "Fine." She goes back to her computer. You have been acknowledged. This is as good as it gets.`;
+                }
+            },
+            'karen': {
+                name: 'Karen from HR',
+                description: `Karen holds a clipboard like a shield. Her smile does not reach her eyes. It has never reached her eyes. Her eyes have never known joy.`,
+                get dialogue() {
+                    if (state.flags.bossOfficeUnlocked) {
+                        return `"I see you have a meeting with Greg." Karen's eye twitches. "Remember: any complaints about management should be submitted through the proper channels." She hands you a form. It's 47 pages long.`;
+                    }
+                    if (!state.flags.talkedToKaren) {
+                        state.flags.talkedToKaren = true;
+                        state.actions.push('talked-karen');
+                        return `"Oh, hello!" Karen's smile is immaculate. Terrifying, but immaculate. "Have you submitted your TPS report? And your quarterly self-evaluation? And signed the new workplace wellness pledge?" She marks something on her clipboard. You've been documented.`;
+                    }
+                    if (state.inventory.includes('sticky-note')) {
+                        state.flags.bossOfficeUnlocked = true;
+                        ROOMS['boss-office'].locked = false;
+                        return `Karen notices the sticky note in your pocket. Her smile falters for just a moment. "Oh. You found one of... those." She glances around nervously. "Greg's office is down south. He's... expecting you. I think." She scurries away. The path to <span class="exit">GREG'S OFFICE</span> is now clear.`;
+                    }
+                    return `"Is there something else?" Karen asks, clipboard at the ready. "I'm very busy documenting." She documents you documenting her. It's documents all the way down.`;
+                }
+            },
+            'janitor': {
+                name: 'The Janitor',
+                description: function() {
+                    if (state.flags.magicDiscovered && state.flags.janitorRevealed) {
+                        return `Aldric the Arcane leans on his mop, which you now realize is probably a staff. His coveralls shimmer with barely-concealed runes. He looks at you with the tired wisdom of someone who has seen too many Chosen Ones come and go.`;
+                    }
+                    return `The janitor mops the same spot he's been mopping for three years. His coveralls say "MAINTENANCE" but something about him seems... off. More off than a guy who mops one spot for three years, anyway.`;
+                },
+                get dialogue() {
+                    if (state.flags.magicDiscovered && !state.flags.janitorRevealed) {
+                        state.flags.janitorRevealed = true;
+                        return `<p>The janitor looks up. His eyes flash with ancient light.</p>
+<p class="magic-reveal">"Ah. So you've found the study." He leans on his mop—or is it a staff? "I am Aldric. I have waited seventeen fiscal quarters for one who could see past the fluorescent veil."</p>
+<p>"I was the Arch-Mage of the Seventh Realm," he continues, "but the benefits here are better. Have you SEEN the 401k matching?"</p>
+<p class="magic-reveal">"The path to freedom has many branches. But beware the Henderson Report. It is not what it seems. Nothing here is what it seems."</p>`;
+                    }
+                    if (state.flags.janitorRevealed) {
+                        return `"Remember," Aldric says, "coffee is mana, the printer is cursed, and HR is always watching." He pauses. "That last one isn't magic. That's just how HR is."`;
+                    }
+                    if (!state.flags.talkedToJanitor) {
+                        state.flags.talkedToJanitor = true;
+                        state.actions.push('talked-janitor');
+                        return `The janitor looks up from his mopping. "The floor," he says cryptically, "is never truly clean." He goes back to mopping. That was... something.`;
+                    }
+                    return `The janitor glances at you. "Mop," he says. It might be a greeting. It might be a warning. With janitors, you never know.`;
+                }
+            },
+            'greg': {
+                name: 'Greg (Your Boss)',
+                description: `Greg is the platonic ideal of middle management. He speaks entirely in corporate buzzwords and has never had an original thought. His nameplate says he's the Regional Manager of Synergy. Nobody knows what that means. Including Greg.`,
+                get dialogue() {
+                    if (state.flags.gregranting) {
+                        return `Greg stares at the space where the window used to contain Greg. He doesn't understand what happened. Neither do you. But you're free now.`;
+                    }
+                    if (!state.flags.talkedToGreg) {
+                        state.flags.talkedToGreg = true;
+                        return `"Ah, yes, the Henderson Report!" Greg nods enthusiastically. "Very important. Very synergistic. When can I expect it on my desk?" He has no idea what the Henderson Report is. The Henderson Report might not exist. Greg might not exist. Reality is negotiable at this point.`;
+                    }
+                    if (state.flags.magicDiscovered && state.inventory.includes('spellbook')) {
+                        return `Greg looks at you. "Is that a spellbook? We have a strict no-spellbooks policy. It's in the employee handbook. Page 847." You're pretty sure he's making that up.`;
+                    }
+                    return `"Synergy," Greg says. "Leverage. Pivot. These are the words of winners." He looks at you expectantly. "Are you a winner?" It's not really a question.`;
+                }
+            }
+        };
+
+        // ==================== GAME STATE ====================
+
+        let state = {
+            currentRoom: 'elevator-lobby',
+            inventory: [],
+            coffee: 0,
+            class: null,
+            flags: {
+                talkedToMarge: false,
+                talkedToKaren: false,
+                talkedToJanitor: false,
+                talkedToGreg: false,
+                metGreg: false,
+                closetOpened: false,
+                magicDiscovered: false,
+                janitorRevealed: false,
+                foundSpellbook: false,
+                hasCourage: false,
+                bossOfficeUnlocked: false,
+                drawerOpened: false,
+                triedPrinter: false,
+                wroteResignation: false,
+            },
+            actions: [],
+            endings: [],
+        };
+
+        // ==================== CLASS ASSIGNMENT ====================
+
+        function assignClass() {
+            const a = state.actions;
+            if (a.includes('stole-lunch') || a.includes('took-stapler')) {
+                state.class = 'rogue';
+            } else if (a.includes('kicked-printer')) {
+                state.class = 'fighter';
+            } else if (a.filter(x => x.startsWith('talked-')).length >= 2) {
+                state.class = 'bard';
+            } else if (a.includes('drank-coffee')) {
+                state.class = 'mage';
+            } else {
+                state.class = 'accountant';
+            }
+        }
+
+        function getClassDescription() {
+            const descs = {
+                rogue: `The book recognizes a kindred spirit. A taker of lunches. A borrower of office supplies. You are <span class="magic-reveal">THE ROGUE</span>. Stealth and cunning are your tools.`,
+                fighter: `The book senses violence in your heart. The printer trembles. You are <span class="magic-reveal">THE FIGHTER</span>. Sometimes the solution is percussive maintenance.`,
+                bard: `The book notes your silver tongue. A talker. A networker. You are <span class="magic-reveal">THE BARD</span>. Charisma is your weapon.`,
+                mage: `The book detects caffeine in your blood. A seeker of arcane (and caffeinated) knowledge. You are <span class="magic-reveal">THE MAGE</span>. Coffee is your mana.`,
+                accountant: `The book finds... spreadsheets. So many spreadsheets. You are <span class="magic-reveal">THE ACCOUNTANT</span>. The most powerful class. You understand GAAP and depreciation schedules.`,
+            };
+            return descs[state.class];
+        }
+
+        // ==================== PARSER ====================
+
+        const ALIASES = {
+            'l': 'look', 'look': 'look', 'examine': 'look', 'x': 'look',
+            'go': 'go', 'move': 'go', 'walk': 'go', 'enter': 'go',
+            'n': 'go north', 's': 'go south', 'e': 'go east', 'w': 'go west',
+            'north': 'go north', 'south': 'go south', 'east': 'go east', 'west': 'go west',
+            'take': 'take', 'get': 'take', 'grab': 'take', 'pick': 'take',
+            'use': 'use', 'activate': 'use', 'open': 'use',
+            'talk': 'talk', 'speak': 'talk', 'chat': 'talk', 'ask': 'talk',
+            'inv': 'inventory', 'inventory': 'inventory', 'i': 'inventory',
+            'help': 'help', 'commands': 'help', '?': 'help',
+            'cast': 'cast', 'magic': 'cast',
+            'quit': 'resign', 'resign': 'resign',
+            'write': 'write',
+        };
+
+        function parse(input) {
+            input = input.trim().toLowerCase();
+            if (input.startsWith('/')) input = input.slice(1);
+
+            let parts = input.split(/\s+/);
+            let cmd = parts[0];
+            let args = parts.slice(1).join(' ');
+
+            // Check for aliases
+            if (ALIASES[cmd]) {
+                let expanded = ALIASES[cmd];
+                if (expanded.includes(' ')) {
+                    let [newCmd, ...rest] = expanded.split(' ');
+                    cmd = newCmd;
+                    args = rest.join(' ') + (args ? ' ' + args : '');
+                } else {
+                    cmd = expanded;
+                }
+            }
+
+            return { cmd, args };
+        }
+
+        // ==================== COMMANDS ====================
+
+        function doLook(args) {
+            const room = ROOMS[state.currentRoom];
+
+            if (!args) {
+                // Look at room
+                let text = `<p class="room-title">${room.name}</p>`;
+                text += `<p>${room.description}</p>`;
+
+                const exits = Object.keys(room.exits);
+                if (exits.length > 0) {
+                    text += `<p>Exits: ${exits.map(e => `<span class="exit">${e.toUpperCase()}</span>`).join(', ')}</p>`;
+                }
+                return text;
+            }
+
+            // Look at specific thing
+            const target = args.toLowerCase().replace(/^(the|a|an)\s+/, '');
+
+            // Check items in room
+            const roomItems = typeof room.items === 'function' ? room.items() : room.items;
+            for (const itemId of roomItems) {
+                const item = ITEMS[itemId];
+                if (item && (itemId.includes(target) || item.name.toLowerCase().includes(target))) {
+                    const desc = typeof item.description === 'function' ? item.description() : item.description;
+                    return `<p>${desc}</p>`;
+                }
+            }
+
+            // Check inventory
+            for (const itemId of state.inventory) {
+                const item = ITEMS[itemId];
+                if (item && (itemId.includes(target) || item.name.toLowerCase().includes(target))) {
+                    const desc = typeof item.description === 'function' ? item.description() : item.description;
+                    return `<p>${desc}</p>`;
+                }
+            }
+
+            // Check NPCs
+            for (const npcId of room.npcs) {
+                const npc = NPCS[npcId];
+                if (npc && (npcId.includes(target) || npc.name.toLowerCase().includes(target))) {
+                    const desc = typeof npc.description === 'function' ? npc.description() : npc.description;
+                    return `<p>${desc}</p>`;
+                }
+            }
+
+            return `<p>You don't see any "${args}" here. Maybe try looking at something that exists. Just a thought.</p>`;
+        }
+
+        function doGo(args) {
+            if (!args) {
+                return `<p>Go where? You're already going nowhere in life. Be more specific.</p>`;
+            }
+
+            const room = ROOMS[state.currentRoom];
+            const dir = args.toLowerCase();
+
+            // Handle special case for "inside" in broom closet
+            if ((dir === 'inside' || dir === 'in') && state.currentRoom === 'broom-closet') {
+                // Already inside
+            }
+
+            const exitDir = Object.keys(room.exits).find(e => e.startsWith(dir) || dir.includes(e));
+
+            if (!exitDir) {
+                return `<p>You can't go "${args}" from here. The laws of physics still apply. Mostly.</p>`;
+            }
+
+            const nextRoomId = room.exits[exitDir];
+            const nextRoom = ROOMS[nextRoomId];
+
+            if (nextRoom.locked) {
+                return `<p>That way is blocked. Karen from HR stands in your path. She wants to "discuss your career trajectory." You back away slowly.</p>`;
+            }
+
+            state.currentRoom = nextRoomId;
+
+            let text = '';
+            if (nextRoom.onEnter) {
+                const enterText = nextRoom.onEnter();
+                if (enterText) text += enterText;
+            }
+            text += doLook('');
+
+            return text;
+        }
+
+        function doTake(args) {
+            if (!args) {
+                return `<p>Take what? Your own advice? That would be a first.</p>`;
+            }
+
+            const room = ROOMS[state.currentRoom];
+            const target = args.toLowerCase().replace(/^(the|a|an)\s+/, '');
+            const roomItems = typeof room.items === 'function' ? room.items() : room.items;
+
+            for (const itemId of roomItems) {
+                const item = ITEMS[itemId];
+                if (item && (itemId.includes(target) || item.name.toLowerCase().includes(target))) {
+                    if (!item.takeable) {
+                        return `<p>You can't take the ${item.name}. It's either bolted down, too heavy, or just doesn't want to be taken. Respect its boundaries.</p>`;
+                    }
+                    if (state.inventory.includes(itemId)) {
+                        return `<p>You already have that. Your pockets aren't THAT deep.</p>`;
+                    }
+                    state.inventory.push(itemId);
+                    if (item.onTake) {
+                        return `<p>${item.onTake()}</p>`;
+                    }
+                    return `<p>You take the ${item.name}. It's yours now. The responsibility is crushing.</p>`;
+                }
+            }
+
+            return `<p>You don't see any "${args}" here that you can take. And believe me, you've considered taking everything.</p>`;
+        }
+
+        function doUse(args) {
+            if (!args) {
+                return `<p>Use what? Your words? Novel concept.</p>`;
+            }
+
+            const target = args.toLowerCase().replace(/^(the|a|an)\s+/, '');
+            const room = ROOMS[state.currentRoom];
+            const roomItems = typeof room.items === 'function' ? room.items() : room.items;
+
+            // Check room items first
+            for (const itemId of roomItems) {
+                const item = ITEMS[itemId];
+                if (item && (itemId.includes(target) || item.name.toLowerCase().includes(target))) {
+                    if (item.onUse) {
+                        return `<p>${item.onUse()}</p>`;
+                    }
+                    return `<p>You're not sure how to use the ${item.name}. It sits there, judging your incompetence.</p>`;
+                }
+            }
+
+            // Check inventory
+            for (const itemId of state.inventory) {
+                const item = ITEMS[itemId];
+                if (item && (itemId.includes(target) || item.name.toLowerCase().includes(target))) {
+                    if (item.onUse) {
+                        return `<p>${item.onUse()}</p>`;
+                    }
+                    return `<p>You hold up the ${item.name}. Now what? You didn't think this through, did you.</p>`;
+                }
+            }
+
+            return `<p>You don't have any "${args}" to use. Perhaps try acquiring things before using them. Revolutionary concept, I know.</p>`;
+        }
+
+        function doTalk(args) {
+            if (!args) {
+                return `<p>Talk to whom? Yourself? You do that enough already.</p>`;
+            }
+
+            const room = ROOMS[state.currentRoom];
+            const target = args.toLowerCase().replace(/^(the|a|an|to)\s+/, '');
+
+            for (const npcId of room.npcs) {
+                const npc = NPCS[npcId];
+                if (npc && (npcId.includes(target) || npc.name.toLowerCase().includes(target))) {
+                    const dialogue = typeof npc.dialogue === 'function' ? npc.dialogue : npc.dialogue;
+                    return `<p>${dialogue}</p>`;
+                }
+            }
+
+            return `<p>There's no "${args}" here to talk to. Talking to inanimate objects is the next step, and you're not there yet.</p>`;
+        }
+
+        function doInventory() {
+            if (state.inventory.length === 0) {
+                return `<p>Your pockets are empty. Much like your career prospects.</p>`;
+            }
+            const items = state.inventory.map(id => `<span class="item">${ITEMS[id].name}</span>`);
+            return `<p>You are carrying: ${items.join(', ')}.</p>`;
+        }
+
+        function doHelp() {
+            return `<p class="system">Available commands:</p>
+<p><span class="cmd">/look [thing]</span> — Examine your surroundings or a specific thing</p>
+<p><span class="cmd">/go [direction]</span> — Move in a direction (north, south, east, west)</p>
+<p><span class="cmd">/take [item]</span> — Pick up an item</p>
+<p><span class="cmd">/use [item]</span> — Use an item</p>
+<p><span class="cmd">/talk [person]</span> — Talk to someone</p>
+<p><span class="cmd">/inv</span> — Check your inventory</p>
+${state.flags.magicDiscovered ? '<p><span class="cmd">/cast [spell]</span> — Cast a spell (if you have the book)</p>' : ''}
+<p><span class="cmd">/resign</span> — Attempt to quit your job (requires items)</p>
+<p class="system">You can also just type directions like "north" or "n".</p>`;
+        }
+
+        function doCast(args) {
+            if (!state.flags.magicDiscovered) {
+                return `<p>Cast? Cast what? A fishing line? A ballot? You don't know any magic. This is an office, not a fantasy novel.</p>`;
+            }
+
+            if (!state.inventory.includes('spellbook')) {
+                return `<p>You'd need the spellbook to cast anything. Magic doesn't just happen because you want it to. Well, sometimes it does here. But not right now.</p>`;
+            }
+
+            const spell = args.toLowerCase();
+
+            if (spell === 'teleport') {
+                if (state.coffee < 3) {
+                    return `<p class="magic-reveal">You attempt to cast TELEPORT. The spellbook crackles... then fizzles.</p>
+<p>Not enough mana. You need 3 coffee. You have ${state.coffee}. The coffee machine awaits.</p>`;
+                }
+                // WIN: Arcane Exit
+                return triggerEnding('arcane', `You speak the words of power. Reality bends. The office dissolves around you.
+
+When you open your eyes, you're standing in a field. Birds sing. The sun is warm. There's no fluorescent lighting. No Karen. No TPS reports.
+
+You're free. Magically, literally free.
+
+Somewhere, Aldric smiles. Another one made it out.`);
+            }
+
+            if (spell === 'defenestrate') {
+                if (state.currentRoom !== 'boss-office') {
+                    return `<p>The DEFENESTRATE spell requires a window. And a target. You're in the ${ROOMS[state.currentRoom].name}. There's nothing to defenestrate here.</p>`;
+                }
+                // WIN: Defenestration
+                return triggerEnding('defenestration', `You raise the spellbook. Greg looks up from his synergy metrics.
+
+"Is that... are you... that's against company policy—"
+
+You speak the word. "DEFENESTRATE."
+
+Greg exits through the window. There's a Wilhelm scream. A distant splash into the dumpster full of shredded TPS reports.
+
+You are now the Regional Manager of Synergy. You have no idea what that means. But you're free from Greg. And really, isn't that the same thing?`);
+            }
+
+            return `<p>Unknown spell: "${spell}". Available spells: TELEPORT (needs 3 coffee), DEFENESTRATE (needs a window and a target). Magic is complicated. So is corporate structure.</p>`;
+        }
+
+        function doResign() {
+            if (!state.inventory.includes('pen') || !state.inventory.includes('paper')) {
+                return `<p>You'd love to quit, but you need to put it in writing. You need a <span class="item">PEN</span> and <span class="item">PAPER</span>. Bureaucracy doesn't end just because you want to leave.</p>`;
+            }
+
+            if (!state.flags.hasCourage) {
+                return `<p>You have the pen. You have the paper. But do you have the <span class="item">COURAGE</span>? Something is holding you back. Maybe you need a little... liquid assistance.</p>`;
+            }
+
+            // WIN: Resignation
+            return triggerEnding('resignation', `You write the letter. Three years of frustration flow through the pen.
+
+"Dear Greg," it begins. "I quit."
+
+That's all it says. That's all it needs to say.
+
+You walk to Greg's office. You place the letter on his desk. He looks up, confused.
+
+"But... synergy?"
+
+"No more synergy, Greg. Not for me."
+
+You walk out. The elevator opens immediately, for the first time in recorded history. The doors close behind you.
+
+You did it. You quit. Properly. With paperwork. HR will be so proud. Well, no. HR will be furious. But you won't be here to see it.`);
+        }
+
+        function doWrite(args) {
+            if (!args || !args.includes('resign') && !args.includes('letter')) {
+                return `<p>Write what? Your memoir? Save it for after you escape.</p>`;
+            }
+            return doResign();
+        }
+
+        // ==================== ENDINGS ====================
+
+        function triggerEnding(type, text) {
+            state.endings.push(type);
+            const titles = {
+                resignation: 'THE RESIGNATION',
+                arcane: 'THE ARCANE EXIT',
+                defenestration: 'THE DEFENESTRATION',
+                escape: 'THE ESCAPE ARTIST',
+            };
+
+            document.getElementById('ending-title').textContent = 'ENDING UNLOCKED';
+            document.getElementById('ending-text').textContent = '';
+            document.getElementById('ending-type').textContent = titles[type];
+
+            // Animate the text
+            const overlay = document.getElementById('ending-overlay');
+            const textEl = document.getElementById('ending-text');
+
+            setTimeout(() => {
+                overlay.classList.add('visible');
+                textEl.innerHTML = text.split('\n\n').map(p => `<p>${p}</p>`).join('');
+            }, 500);
+
+            return `<p class="magic-reveal">${text.split('\n\n')[0]}</p>`;
+        }
+
+        // ==================== MAIN LOOP ====================
+
+        function execute(input) {
+            const { cmd, args } = parse(input);
+
+            switch (cmd) {
+                case 'look': return doLook(args);
+                case 'go': return doGo(args);
+                case 'take': return doTake(args);
+                case 'use': return doUse(args);
+                case 'talk': return doTalk(args);
+                case 'inventory': return doInventory();
+                case 'help': return doHelp();
+                case 'cast': return doCast(args);
+                case 'resign': return doResign();
+                case 'write': return doWrite(args);
+                default:
+                    // Try to interpret as direction
+                    if (['north', 'south', 'east', 'west', 'n', 's', 'e', 'w', 'inside', 'in'].includes(cmd)) {
+                        return doGo(cmd);
+                    }
+                    return `<p class="error">I don't understand "${input}". Type <span class="cmd">/help</span> for available commands. Or don't. I'm a text parser, not your mom.</p>`;
+            }
+        }
+
+        // ==================== UI ====================
+
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+
+        function print(html) {
+            output.innerHTML += html;
+            output.scrollTop = output.scrollHeight;
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('stat-coffee').textContent = state.coffee;
+            if (state.class) {
+                document.getElementById('stat-class').innerHTML = `Class: <span class="class-label">${state.class.toUpperCase()}</span>`;
+            }
+        }
+
+        function handleInput(e) {
+            if (e.key !== 'Enter') return;
+            const cmd = input.value.trim();
+            if (!cmd) return;
+
+            print(`<p class="system">&gt; ${cmd}</p>`);
+            input.value = '';
+
+            const result = execute(cmd);
+            print(result);
+        }
+
+        // ==================== INIT ====================
+
+        input.addEventListener('keydown', handleInput);
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            document.getElementById('ending-overlay').classList.remove('visible');
+            state = {
+                currentRoom: 'elevator-lobby',
+                inventory: [],
+                coffee: 0,
+                class: null,
+                flags: {
+                    talkedToMarge: false,
+                    talkedToKaren: false,
+                    talkedToJanitor: false,
+                    talkedToGreg: false,
+                    metGreg: false,
+                    closetOpened: false,
+                    magicDiscovered: false,
+                    janitorRevealed: false,
+                    foundSpellbook: false,
+                    hasCourage: false,
+                    bossOfficeUnlocked: false,
+                    drawerOpened: false,
+                    triedPrinter: false,
+                },
+                actions: [],
+                endings: state.endings, // Keep endings discovered
+            };
+            ROOMS['boss-office'].locked = true;
+            output.innerHTML = '';
+            print(`<p class="system">New game. Same hell. Different choices?</p>`);
+            print(doLook(''));
+        });
+
+        // Start game
+        print(`<p><em>Welcome to <span class="danger">OFFICE HELL</span>, a text adventure for the gainfully employed and spiritually depleted.</em></p>`);
+        print(`<p class="system">Type commands like <span class="cmd">/look</span>, <span class="cmd">/go north</span>, <span class="cmd">/talk karen</span>. Type <span class="cmd">/help</span> for more.</p>`);
+        print('<hr style="border-color: var(--border); margin: 1rem 0;">');
+        print(doLook(''));
+        input.focus();
+
+    })();
+    </script>
+</body>
+</html>

@@ -9,6 +9,7 @@ A gallery of small, interactive experiments you can play with in your browser.
 | # | Name | Description |
 |---|------|-------------|
 | 001 | [Game of Life: Virus Defense](experiments/001-game-of-life/) | Build your colony, survive waves of virus cells trying to infect you |
+| 002 | [Office Hell](experiments/002-office-hell/) | Text adventure — escape the office, find the wizard, question reality |
 
 ## How This Repo Works
 

@@ -131,6 +131,17 @@ main {
     color: #d4a040;
 }
 
+.card-tag.tag-magic {
+    background: #3b1d5c;
+    color: #c084fc;
+}
+
+.text-preview {
+    width: 100%;
+    max-width: 200px;
+    aspect-ratio: 1;
+}
+
 footer {
     text-align: center;
     padding: 3rem 2rem;
