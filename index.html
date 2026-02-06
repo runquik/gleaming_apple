@@ -26,6 +26,19 @@
                     <span class="card-tag tag-virus">virus</span>
                 </div>
             </a>
+
+            <a href="experiments/002-office-hell/" class="card">
+                <div class="card-number">002</div>
+                <div class="card-preview">
+                    <div id="preview-office" class="text-preview"></div>
+                </div>
+                <div class="card-info">
+                    <h2>Office Hell</h2>
+                    <p>A text adventure. Escape the office. Find the wizard. Question reality.</p>
+                    <span class="card-tag">text-adventure</span>
+                    <span class="card-tag tag-magic">magic</span>
+                </div>
+            </a>
         </div>
     </main>
 
@@ -150,6 +163,55 @@
         function tick() { step(); draw(); }
         draw();
         setInterval(tick, 80);
+    })();
+
+    // Text preview for Office Hell
+    (function() {
+        const el = document.getElementById('preview-office');
+        if (!el) return;
+
+        const lines = [
+            { text: '> /look', color: '#c084fc' },
+            { text: '', color: '' },
+            { text: 'ELEVATOR LOBBY', color: '#4ade80' },
+            { text: 'Fluorescent lights flicker.', color: '#c8c8d0' },
+            { text: 'KAREN patrols nearby.', color: '#38bdf8' },
+            { text: '', color: '' },
+            { text: '> /go south', color: '#c084fc' },
+            { text: '', color: '' },
+            { text: 'YOUR CUBICLE', color: '#4ade80' },
+            { text: 'A DEAD PLANT mocks you.', color: '#facc15' },
+            { text: '', color: '' },
+            { text: '> /open closet', color: '#c084fc' },
+            { text: '', color: '' },
+            { text: 'The closet is... bigger', color: '#c8c8d0' },
+            { text: 'on the inside??', color: '#c8c8d0' },
+            { text: '', color: '' },
+            { text: 'A SPELLBOOK glows.', color: '#c084fc', glow: true },
+            { text: '', color: '' },
+            { text: '"What the hell."', color: '#c8c8d0' },
+        ];
+
+        let idx = 0;
+        el.style.cssText = 'font-family:monospace;font-size:9px;line-height:1.4;padding:8px;background:#0a0a0f;border-radius:6px;height:200px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;';
+
+        function addLine() {
+            const line = lines[idx % lines.length];
+            const div = document.createElement('div');
+            div.textContent = line.text || '\u00A0';
+            div.style.color = line.color || '#666';
+            if (line.glow) div.style.textShadow = '0 0 8px #c084fc';
+            el.appendChild(div);
+
+            while (el.children.length > 12) el.removeChild(el.firstChild);
+
+            idx++;
+            if (idx % lines.length === 0) {
+                setTimeout(() => { el.innerHTML = ''; }, 2000);
+            }
+        }
+
+        setInterval(addLine, 400);
     })();
     </script>
 </body>
