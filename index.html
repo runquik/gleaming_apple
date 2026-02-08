@@ -74,9 +74,12 @@
         function emitTrailPt(x, y, vx, vy) {
             const speed = Math.sqrt(vx * vx + vy * vy);
             let nx, ny;
-            if (speed > 0.3) { nx = -vy / speed; ny = vx / speed; }
+            if (speed > 0.3) {
+                const spread = (Math.random() - 0.5) * (Math.PI / 6);
+                const base = Math.atan2(vy, vx) + spread;
+                nx = Math.cos(base); ny = Math.sin(base);
+            }
             else { const a = Math.random() * Math.PI * 2; nx = Math.cos(a); ny = Math.sin(a); }
-            if (Math.random() < 0.5) { nx = -nx; ny = -ny; }
 
             const hue = Math.random() < 0.35 ? 45 + Math.random() * 15 :
                         Math.random() < 0.5  ? 185 + Math.random() * 25 : 55 + Math.random() * 15;
@@ -84,10 +87,10 @@
             trail.push({
                 x, y, originX: x, originY: y, nx, ny, age: 0, hue,
                 sat: 50 + Math.random() * 30, lit: 70 + Math.random() * 20,
-                radius: 0.5, brightness: 0.1, phase: GROW,
+                radius: 1, brightness: 0.1, phase: GROW,
                 sineOff: Math.random() * Math.PI * 2,
                 flowSpd: 0.5 + Math.random() * 0.4,
-                dmgR: 4,
+                dmgR: 9,
             });
             if (trail.length > MAX_PTS) trail.splice(0, trail.length - MAX_PTS);
         }
@@ -97,30 +100,30 @@
             if (p.age < DUR[0]) {
                 p.phase = GROW;
                 const t = p.age / DUR[0];
-                p.radius = 0.5 + 3 * easeOut(t);
+                p.radius = 1 + 7 * easeOut(t);
                 p.brightness = 0.1 + 0.7 * easeOut(t);
             } else if (p.age < DUR[0] + DUR[1]) {
                 p.phase = GLEAM;
-                p.radius = 3.5 + Math.sin(p.age * 0.02 + p.sineOff) * 0.4;
+                p.radius = 8 + Math.sin(p.age * 0.02 + p.sineOff) * 1;
                 p.brightness = 0.85 + 0.15 * Math.sin(p.age * 0.015 + p.sineOff);
             } else if (p.age < DUR[0] + DUR[1] + DUR[2]) {
                 p.phase = FLOW;
                 const t = (p.age - DUR[0] - DUR[1]) / DUR[2];
-                const drift = t * 20 * p.flowSpd;
-                const sine = Math.sin(t * Math.PI * 3 + p.sineOff) * 6;
+                const drift = t * 45 * p.flowSpd;
+                const sine = Math.sin(t * Math.PI * 3 + p.sineOff) * 14;
                 p.x = p.originX + p.nx * drift + p.ny * sine;
                 p.y = p.originY + p.ny * drift - p.nx * sine;
-                p.radius = 3.5 + t * 1;
+                p.radius = 8 + t * 4;
                 p.brightness = 1.0 - t * 0.7;
             } else if (p.age < TOTAL) {
                 p.phase = FADE;
                 const t = (p.age - DUR[0] - DUR[1] - DUR[2]) / DUR[3];
-                const prevDrift = 20 * p.flowSpd;
+                const prevDrift = 45 * p.flowSpd;
                 const drift = prevDrift + (1 - t) * 3;
-                const sine = Math.sin(Math.PI * 3 + p.sineOff + t * 0.5) * 6 * (1 - t);
+                const sine = Math.sin(Math.PI * 3 + p.sineOff + t * 0.5) * 14 * (1 - t);
                 p.x = p.originX + p.nx * drift + p.ny * sine;
                 p.y = p.originY + p.ny * drift - p.nx * sine;
-                p.radius = 4.5;
+                p.radius = 12;
                 p.brightness = 0.3 * (1 - t);
             } else {
                 p.brightness = 0;
@@ -138,7 +141,7 @@
             else if (edge === 2) { x = Math.random() * W; y = 0; vx = (Math.random()-0.5)*sp; vy = sp; }
             else { x = Math.random() * W; y = H; vx = (Math.random()-0.5)*sp; vy = -sp; }
             const cells = [];
-            for (let i = 0; i < 3 + Math.floor(Math.random() * 4); i++) {
+            for (let i = 0; i < 4 + Math.floor(Math.random() * 5); i++) {
                 const a = Math.random() * Math.PI * 2, d = Math.random() * 6;
                 cells.push({ ox: Math.cos(a)*d, oy: Math.sin(a)*d, r: 1+Math.random()*1.5, phase: Math.random()*6.28, alive: true });
             }
@@ -148,16 +151,16 @@
         // Mini stampede state machine (6s calm, burst 6-10)
         let spState = 'calm', spClock = 0, stragTimer = 0;
         let stCount = 0, stSpawned = 0, stInterval = 0, stSub = 0;
-        const CALM = 6000, STAM_DUR = 400;
+        const CALM = 4000, STAM_DUR = 600;
 
         function updateSpawner(dt) {
             spClock += dt;
             if (spState === 'calm') {
                 stragTimer += dt;
-                if (stragTimer > 2000 && evils.length < 3) { spawnEvil(); stragTimer = 0; }
+                if (stragTimer > 1500 && evils.length < 5) { spawnEvil(); stragTimer = 0; }
                 if (spClock > CALM) {
                     spState = 'stampede'; spClock = 0;
-                    stCount = 6 + Math.floor(Math.random() * 5);
+                    stCount = 10 + Math.floor(Math.random() * 9);
                     stSpawned = 0; stInterval = STAM_DUR / stCount; stSub = 0;
                 }
             } else {
@@ -251,7 +254,7 @@
             if (conn.length > 1) {
                 const saved = ctx.globalCompositeOperation;
                 ctx.globalCompositeOperation = 'lighter';
-                const passes = [{ w: 8, a: 0.08 }, { w: 3.5, a: 0.2 }, { w: 1.2, a: 0.7 }];
+                const passes = [{ w: 16, a: 0.08 }, { w: 7, a: 0.2 }, { w: 2.5, a: 0.7 }];
                 for (const pass of passes) {
                     ctx.beginPath();
                     ctx.moveTo(conn[0].x, conn[0].y);
@@ -268,9 +271,9 @@
             // GLEAM halos
             for (const p of conn) {
                 if (p.phase !== GLEAM) continue;
-                const r = p.radius * 2.5;
+                const r = p.radius * 4;
                 const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
-                g.addColorStop(0, `hsla(0,0%,100%,${p.brightness*0.4})`);
+                g.addColorStop(0, `hsla(0,0%,100%,${p.brightness*0.6})`);
                 g.addColorStop(0.3, `hsla(${p.hue},${p.sat}%,${p.lit}%,${p.brightness*0.15})`);
                 g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
                 ctx.fillStyle = g;
@@ -280,7 +283,7 @@
             // Flowing dots
             for (const p of flow) {
                 const r = p.radius;
-                const gr = r * 2.5;
+                const gr = r * 3.5;
                 const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,gr);
                 g.addColorStop(0, `hsla(${p.hue},${p.sat}%,${Math.min(p.lit+15,97)}%,${p.brightness*0.5})`);
                 g.addColorStop(1, `hsla(${p.hue},${p.sat}%,${p.lit}%,0)`);
