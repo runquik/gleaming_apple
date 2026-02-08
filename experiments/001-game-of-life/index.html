@@ -78,24 +78,92 @@
         const ctx = canvas.getContext('2d');
 
         let W, H;
+        let particleCanvas, particleCtx;
+        let bloomCanvas, bloomCtx;
+
         function resize() {
             W = canvas.width = window.innerWidth;
             H = canvas.height = window.innerHeight;
+
+            particleCanvas = document.createElement('canvas');
+            particleCanvas.width = W;
+            particleCanvas.height = H;
+            particleCtx = particleCanvas.getContext('2d');
+
+            bloomCanvas = document.createElement('canvas');
+            bloomCanvas.width = Math.ceil(W / 4);
+            bloomCanvas.height = Math.ceil(H / 4);
+            bloomCtx = bloomCanvas.getContext('2d');
         }
         resize();
         window.addEventListener('resize', resize);
 
-        // --- Trail lifecycle constants ---
-        const PHASE_GROW  = 0, PHASE_GLEAM = 1, PHASE_FLOW = 2, PHASE_FADE = 3;
-        const GROW_DUR  = 400;
-        const GLEAM_DUR = 600;
-        const FLOW_DUR  = 1200;
-        const FADE_DUR  = 400;
-        const TOTAL_DUR = GROW_DUR + GLEAM_DUR + FLOW_DUR + FADE_DUR;
-        const MAX_TRAIL = 300;
+        // --- Simplex noise ---
+        const PERM = new Uint8Array(512);
+        const GRAD2 = [
+            [1,0],[-1,0],[0,1],[0,-1],
+            [1,1],[-1,1],[1,-1],[-1,-1],
+            [1,0],[-1,0],[0,1],[0,-1]
+        ];
+        (function seedPerm() {
+            const p = new Uint8Array(256);
+            for (let i = 0; i < 256; i++) p[i] = i;
+            for (let i = 255; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+            }
+            for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
+        })();
+
+        const F2 = 0.5 * (Math.sqrt(3) - 1);
+        const G2 = (3 - Math.sqrt(3)) / 6;
+
+        function simplexNoise2D(xin, yin) {
+            const s = (xin + yin) * F2;
+            const i = Math.floor(xin + s), j = Math.floor(yin + s);
+            const t = (i + j) * G2;
+            const X0 = i - t, Y0 = j - t;
+            const x0 = xin - X0, y0 = yin - Y0;
+            const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+            const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+
+            let n0 = 0, n1 = 0, n2 = 0;
+            let t0 = 0.5 - x0 * x0 - y0 * y0;
+            if (t0 > 0) { t0 *= t0; const g = GRAD2[PERM[ii + PERM[jj]] % 12]; n0 = t0 * t0 * (g[0] * x0 + g[1] * y0); }
+            let t1 = 0.5 - x1 * x1 - y1 * y1;
+            if (t1 > 0) { t1 *= t1; const g = GRAD2[PERM[ii + i1 + PERM[jj + j1]] % 12]; n1 = t1 * t1 * (g[0] * x1 + g[1] * y1); }
+            let t2 = 0.5 - x2 * x2 - y2 * y2;
+            if (t2 > 0) { t2 *= t2; const g = GRAD2[PERM[ii + 1 + PERM[jj + 1]] % 12]; n2 = t2 * t2 * (g[0] * x2 + g[1] * y2); }
+            return 70 * (n0 + n1 + n2);
+        }
+
+        const NOISE_SCALE = 0.003;
+        const NOISE_TIME_FACTOR = 0.00015;
+
+        function noiseField(x, y, time) {
+            const t = time * NOISE_TIME_FACTOR;
+            const nx = simplexNoise2D(x * NOISE_SCALE, y * NOISE_SCALE + t);
+            const ny = simplexNoise2D(x * NOISE_SCALE + 31.7, y * NOISE_SCALE + t + 17.3);
+            return { fx: ny, fy: -nx }; // curl noise
+        }
+
+        // --- Particle system constants ---
+        const MAX_PARTICLES = 2000;
+        const EMIT_RATE = 10;
+        const PARTICLE_LIFE = 2500;
+        const GROW_MS = 200;
+        const FADE_MS = 400;
+        const NOISE_STRENGTH = 0.15;
+        const RIBBON_LENGTH = 80;
+        const RIBBON_MAX_AGE = 500;
+        const RIBBON_DAMAGE_RADIUS = 25;
+        const PARTICLE_DAMAGE_RADIUS = 8;
 
         // --- Data ---
-        const trail = [];
+        const particles = [];
+        const ribbon = [];
         const evilBlobs = [];
         const sparks = [];
 
@@ -104,102 +172,77 @@
         let mouseX = 0, mouseY = 0;
         let prevMouseX = 0, prevMouseY = 0;
         let mouseVX = 0, mouseVY = 0;
-        let emitTimer = 0;
 
-        // --- Ease-out helper ---
-        function easeOut(t) { return 1 - (1 - t) * (1 - t); }
-
-        // --- Emit trail point ---
-        function emitTrailPoint(x, y, vx, vy) {
+        // --- Emit particles ---
+        function emitParticles(x, y, vx, vy, count) {
             const speed = Math.sqrt(vx * vx + vy * vy);
-            // Forward flow direction with slight angular spread (±15°)
-            let nx, ny;
-            if (speed > 0.5) {
-                const spread = (Math.random() - 0.5) * (Math.PI / 6); // ±15°
-                const base = Math.atan2(vy, vx) + spread;
-                nx = Math.cos(base);
-                ny = Math.sin(base);
-            } else {
-                const a = Math.random() * Math.PI * 2;
-                nx = Math.cos(a);
-                ny = Math.sin(a);
+            const baseAngle = speed > 0.5 ? Math.atan2(vy, vx) : Math.random() * Math.PI * 2;
+
+            for (let i = 0; i < count; i++) {
+                if (particles.length >= MAX_PARTICLES) break;
+
+                const spread = (Math.random() - 0.5) * (Math.PI / 2); // +-45 deg
+                const angle = baseAngle + spread;
+                const spd = (0.3 + Math.random() * 0.7) * Math.max(speed * 0.3, 0.5);
+
+                const hue = Math.random() < 0.35 ? 45 + Math.random() * 15 :
+                            Math.random() < 0.5  ? 185 + Math.random() * 25 :
+                            55 + Math.random() * 15;
+
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * spd,
+                    vy: Math.sin(angle) * spd,
+                    age: 0,
+                    maxAge: PARTICLE_LIFE * (0.7 + Math.random() * 0.6),
+                    size: 1 + Math.random() * 2,
+                    hue,
+                    sat: 50 + Math.random() * 30,
+                    lit: 70 + Math.random() * 20,
+                    alpha: 0,
+                });
             }
-
-            const hue = Math.random() < 0.35 ? 45 + Math.random() * 15 :
-                        Math.random() < 0.5  ? 185 + Math.random() * 25 :
-                        55 + Math.random() * 15;
-
-            trail.push({
-                x, y,
-                originX: x, originY: y,
-                nx, ny,
-                age: 0,
-                hue,
-                sat: 50 + Math.random() * 30,
-                lit: 70 + Math.random() * 20,
-                radius: 2,
-                brightness: 0.1,
-                phase: PHASE_GROW,
-                sineOffset: Math.random() * Math.PI * 2,
-                flowSpeed: 0.8 + Math.random() * 0.8,
-                damageRadius: 22,
-            });
-
-            if (trail.length > MAX_TRAIL) trail.splice(0, trail.length - MAX_TRAIL);
         }
 
-        // --- Update single trail point ---
-        function updateTrailPoint(p, dt) {
+        // --- Update single particle ---
+        function updateParticle(p, dt, time) {
             p.age += dt;
 
-            if (p.age < GROW_DUR) {
-                // GROW phase
-                p.phase = PHASE_GROW;
-                const t = p.age / GROW_DUR;
-                p.radius = 2 + 18 * easeOut(t);
-                p.brightness = 0.1 + 0.7 * easeOut(t);
-            } else if (p.age < GROW_DUR + GLEAM_DUR) {
-                // GLEAM phase
-                p.phase = PHASE_GLEAM;
-                const t = (p.age - GROW_DUR) / GLEAM_DUR;
-                p.radius = 20 + Math.sin(p.age * 0.015 + p.sineOffset) * 2;
-                p.brightness = 0.85 + 0.15 * Math.sin(p.age * 0.012 + p.sineOffset);
-            } else if (p.age < GROW_DUR + GLEAM_DUR + FLOW_DUR) {
-                // FLOW phase — drift forward with sine undulation
-                p.phase = PHASE_FLOW;
-                const t = (p.age - GROW_DUR - GLEAM_DUR) / FLOW_DUR;
-                const drift = t * 120 * p.flowSpeed;
-                const sine = Math.sin(t * Math.PI * 3 + p.sineOffset) * 30;
-                p.x = p.originX + p.nx * drift + p.ny * sine;
-                p.y = p.originY + p.ny * drift - p.nx * sine;
-                p.radius = 20 + t * 8;
-                p.brightness = 1.0 - t * 0.7;
-            } else if (p.age < TOTAL_DUR) {
-                // FADE phase
-                p.phase = PHASE_FADE;
-                const t = (p.age - GROW_DUR - GLEAM_DUR - FLOW_DUR) / FADE_DUR;
-                // Decelerate drift
-                const prevDrift = 120 * p.flowSpeed;
-                const drift = prevDrift + (1 - t) * 15;
-                const sine = Math.sin(Math.PI * 3 + p.sineOffset + t * 0.5) * 30 * (1 - t);
-                p.x = p.originX + p.nx * drift + p.ny * sine;
-                p.y = p.originY + p.ny * drift - p.nx * sine;
-                p.radius = 28;
-                p.brightness = 0.3 * (1 - t);
+            // Alpha envelope
+            if (p.age < GROW_MS) {
+                p.alpha = p.age / GROW_MS;
+            } else if (p.age > p.maxAge - FADE_MS) {
+                p.alpha = Math.max(0, (p.maxAge - p.age) / FADE_MS);
             } else {
-                p.brightness = 0;
+                p.alpha = 1;
             }
+
+            // Noise flow field
+            const field = noiseField(p.x, p.y, time);
+            p.vx += field.fx * NOISE_STRENGTH * (dt / 16);
+            p.vy += field.fy * NOISE_STRENGTH * (dt / 16);
+
+            // Drag
+            const drag = Math.pow(0.98, dt / 16);
+            p.vx *= drag;
+            p.vy *= drag;
+
+            // Move
+            p.x += p.vx * dt * 0.06;
+            p.y += p.vy * dt * 0.06;
+
+            // Slight size growth
+            p.size += 0.001 * dt;
         }
 
-        // --- Catmull-Rom spline helper ---
-        function catmullRom(p0, p1, p2, p3, t) {
-            const t2 = t * t, t3 = t2 * t;
-            return 0.5 * (
-                (2 * p1) +
-                (-p0 + p2) * t +
-                (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-                (-p0 + 3 * p1 - 3 * p2 + p3) * t3
-            );
+        // --- Ribbon (cursor trail) ---
+        function updateRibbon(x, y, time) {
+            ribbon.push({ x, y, time });
+            if (ribbon.length > RIBBON_LENGTH) ribbon.shift();
+            // Trim old entries
+            while (ribbon.length > 0 && time - ribbon[0].time > RIBBON_MAX_AGE) {
+                ribbon.shift();
+            }
         }
 
         // --- Evil blob ---
@@ -264,8 +307,8 @@
             }
         }
 
-        // --- Collision: trail points vs evil cells ---
-        function checkCollisions() {
+        // --- Collision: ribbon + particles vs evil cells ---
+        function checkCollisions(time) {
             for (let bi = evilBlobs.length - 1; bi >= 0; bi--) {
                 const blob = evilBlobs[bi];
 
@@ -275,22 +318,40 @@
 
                     const cx = blob.x + cell.ox;
                     const cy = blob.y + cell.oy;
+                    let killed = false;
 
-                    for (let ti = trail.length - 1; ti >= 0; ti--) {
-                        const tp = trail[ti];
-                        if (tp.brightness < 0.5) continue;
-
-                        const dx = cx - tp.x;
-                        const dy = cy - tp.y;
-                        const distSq = dx * dx + dy * dy;
-                        const hitDist = tp.damageRadius + cell.radius;
-
-                        if (distSq < hitDist * hitDist) {
-                            cell.alive = false;
-                            tp.brightness = Math.max(tp.brightness - 0.15, 0);
-                            burstSparks(cx, cy, blob.h, blob.s, blob.l, 6);
+                    // Primary: ribbon points (last 300ms)
+                    for (let ri = ribbon.length - 1; ri >= 0; ri--) {
+                        const rp = ribbon[ri];
+                        if (time - rp.time > 300) break;
+                        const dx = cx - rp.x;
+                        const dy = cy - rp.y;
+                        const hitDist = RIBBON_DAMAGE_RADIUS + cell.radius;
+                        if (dx * dx + dy * dy < hitDist * hitDist) {
+                            killed = true;
                             break;
                         }
+                    }
+
+                    // Secondary: bright particles
+                    if (!killed) {
+                        for (let pi = particles.length - 1; pi >= 0; pi--) {
+                            const pp = particles[pi];
+                            if (pp.alpha < 0.5) continue;
+                            const dx = cx - pp.x;
+                            const dy = cy - pp.y;
+                            const hitDist = PARTICLE_DAMAGE_RADIUS + cell.radius;
+                            if (dx * dx + dy * dy < hitDist * hitDist) {
+                                killed = true;
+                                pp.alpha = Math.max(pp.alpha - 0.15, 0);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (killed) {
+                        cell.alive = false;
+                        burstSparks(cx, cy, blob.h, blob.s, blob.l, 6);
                     }
                 }
 
@@ -356,21 +417,18 @@
         // --- Update ---
         let lastTime = 0;
 
-        function update(dt) {
-            // Emit trail while mouse is down
+        function update(dt, timestamp) {
+            // Emit particles while mouse is down
             if (mouseDown) {
-                emitTimer += dt;
-                if (emitTimer > 25) {
-                    emitTrailPoint(mouseX, mouseY, mouseVX, mouseVY);
-                    emitTimer = 0;
-                }
+                emitParticles(mouseX, mouseY, mouseVX, mouseVY, EMIT_RATE);
+                updateRibbon(mouseX, mouseY, timestamp);
             }
 
-            // Update trail points
-            for (let i = trail.length - 1; i >= 0; i--) {
-                updateTrailPoint(trail[i], dt);
-                if (trail[i].brightness <= 0 && trail[i].age >= TOTAL_DUR) {
-                    trail.splice(i, 1);
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                updateParticle(particles[i], dt, timestamp);
+                if (particles[i].age >= particles[i].maxAge) {
+                    particles.splice(i, 1);
                 }
             }
 
@@ -416,13 +474,75 @@
                 if (s.life <= 0) sparks.splice(i, 1);
             }
 
-            checkCollisions();
+            checkCollisions(timestamp);
         }
 
         // --- Render ---
-        function render() {
+        function render(timestamp) {
+            // Background fade
             ctx.fillStyle = 'rgba(2, 2, 6, 0.12)';
             ctx.fillRect(0, 0, W, H);
+
+            // --- Pass 1: Render particles to offscreen canvas ---
+            particleCtx.clearRect(0, 0, W, H);
+            particleCtx.globalCompositeOperation = 'lighter';
+            for (const p of particles) {
+                if (p.alpha <= 0) continue;
+                particleCtx.beginPath();
+                particleCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                particleCtx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${p.lit}%, ${p.alpha})`;
+                particleCtx.fill();
+            }
+            particleCtx.globalCompositeOperation = 'source-over';
+
+            // --- Pass 2: Bloom via downscale + blur ---
+            const bw = bloomCanvas.width, bh = bloomCanvas.height;
+            bloomCtx.clearRect(0, 0, bw, bh);
+            bloomCtx.drawImage(particleCanvas, 0, 0, bw, bh);
+            bloomCtx.filter = 'blur(8px)';
+            bloomCtx.drawImage(bloomCanvas, 0, 0);
+            bloomCtx.drawImage(bloomCanvas, 0, 0);
+            bloomCtx.filter = 'none';
+
+            // --- Composite: bloom layer (additive) ---
+            const saved = ctx.globalCompositeOperation;
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.6;
+            ctx.drawImage(bloomCanvas, 0, 0, W, H);
+            ctx.globalAlpha = 1;
+
+            // --- Composite: sharp particle layer (additive) ---
+            ctx.drawImage(particleCanvas, 0, 0);
+            ctx.globalCompositeOperation = saved;
+
+            // --- Ribbon rendering ---
+            if (ribbon.length > 1) {
+                ctx.globalCompositeOperation = 'lighter';
+
+                // Outer glow
+                ctx.beginPath();
+                ctx.moveTo(ribbon[0].x, ribbon[0].y);
+                for (let i = 1; i < ribbon.length; i++) {
+                    ctx.lineTo(ribbon[i].x, ribbon[i].y);
+                }
+                ctx.strokeStyle = 'hsla(45, 80%, 70%, 0.15)';
+                ctx.lineWidth = 12;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+
+                // Bright core
+                ctx.beginPath();
+                ctx.moveTo(ribbon[0].x, ribbon[0].y);
+                for (let i = 1; i < ribbon.length; i++) {
+                    ctx.lineTo(ribbon[i].x, ribbon[i].y);
+                }
+                ctx.strokeStyle = 'hsla(50, 90%, 92%, 0.85)';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                ctx.globalCompositeOperation = saved;
+            }
 
             // --- Draw evil blobs ---
             for (const blob of evilBlobs) {
@@ -447,97 +567,6 @@
                 }
             }
 
-            // --- Separate trail points by phase ---
-            const connected = []; // GROW + GLEAM — rendered as connected spline
-            const flowing = [];   // FLOW + FADE — rendered as individual dots
-
-            for (const p of trail) {
-                if (p.brightness <= 0) continue;
-                if (p.phase === PHASE_GROW || p.phase === PHASE_GLEAM) {
-                    connected.push(p);
-                } else {
-                    flowing.push(p);
-                }
-            }
-
-            // --- Draw connected trail (catmull-rom spline, 3 layered passes) ---
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            if (connected.length > 1) {
-                const saved = ctx.globalCompositeOperation;
-                ctx.globalCompositeOperation = 'lighter';
-
-                // 3 passes: wide faint glow, mid glow, bright core
-                const passes = [
-                    { widthMul: 40, alphaMul: 0.08 },
-                    { widthMul: 16,  alphaMul: 0.2 },
-                    { widthMul: 5,  alphaMul: 0.7 },
-                ];
-
-                for (const pass of passes) {
-                    ctx.beginPath();
-                    for (let i = 0; i < connected.length; i++) {
-                        const p0 = connected[Math.max(i - 1, 0)];
-                        const p1 = connected[i];
-                        const p2 = connected[Math.min(i + 1, connected.length - 1)];
-                        const p3 = connected[Math.min(i + 2, connected.length - 1)];
-
-                        if (i === 0) {
-                            ctx.moveTo(p1.x, p1.y);
-                        } else {
-                            const steps = 4;
-                            for (let s = 1; s <= steps; s++) {
-                                const t = s / steps;
-                                const sx = catmullRom(p0.x, p1.x, p2.x, p3.x, t);
-                                const sy = catmullRom(p0.y, p1.y, p2.y, p3.y, t);
-                                ctx.lineTo(sx, sy);
-                            }
-                        }
-                    }
-
-                    const avg = connected.reduce((s, p) => s + p.brightness, 0) / connected.length;
-                    const avgHue = connected[Math.floor(connected.length / 2)].hue;
-                    const avgSat = connected[Math.floor(connected.length / 2)].sat;
-                    const avgLit = connected[Math.floor(connected.length / 2)].lit;
-
-                    ctx.strokeStyle = `hsla(${avgHue}, ${avgSat}%, ${Math.min(avgLit + 10, 97)}%, ${avg * pass.alphaMul})`;
-                    ctx.lineWidth = pass.widthMul * Math.max(avg, 0.3);
-                    ctx.stroke();
-                }
-
-                ctx.globalCompositeOperation = saved;
-            }
-
-            // --- Draw GLEAM halos (per-point radial gradient) ---
-            for (const p of connected) {
-                if (p.phase !== PHASE_GLEAM) continue;
-                const r = p.radius * 5;
-                const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-                g.addColorStop(0, `hsla(0, 0%, 100%, ${p.brightness * 0.7})`);
-                g.addColorStop(0.3, `hsla(${p.hue}, ${p.sat}%, ${p.lit}%, ${p.brightness * 0.2})`);
-                g.addColorStop(1, `hsla(${p.hue}, ${p.sat}%, ${p.lit}%, 0)`);
-                ctx.fillStyle = g;
-                ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
-            }
-
-            // --- Draw flowing/fading points (individual glowing dots) ---
-            for (const p of flowing) {
-                const r = p.radius;
-                const gr = r * 4;
-                const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gr);
-                g.addColorStop(0, `hsla(${p.hue}, ${p.sat}%, ${Math.min(p.lit + 15, 97)}%, ${p.brightness * 0.6})`);
-                g.addColorStop(0.4, `hsla(${p.hue}, ${p.sat}%, ${p.lit}%, ${p.brightness * 0.2})`);
-                g.addColorStop(1, `hsla(${p.hue}, ${p.sat}%, ${p.lit}%, 0)`);
-                ctx.fillStyle = g;
-                ctx.fillRect(p.x - gr, p.y - gr, gr * 2, gr * 2);
-
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, r * 0.5, 0, Math.PI * 2);
-                ctx.fillStyle = `hsla(${p.hue}, ${p.sat - 10}%, ${Math.min(p.lit + 20, 97)}%, ${p.brightness * 0.8})`;
-                ctx.fill();
-            }
-
             // --- Draw sparks ---
             for (const s of sparks) {
                 ctx.beginPath();
@@ -551,8 +580,8 @@
         function loop(timestamp) {
             const dt = Math.min(timestamp - lastTime, 50);
             lastTime = timestamp;
-            update(dt);
-            render();
+            update(dt, timestamp);
+            render(timestamp);
             requestAnimationFrame(loop);
         }
 
